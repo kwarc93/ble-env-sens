@@ -86,7 +86,11 @@
 #include "nrf_gpio.h"
 #include "nrf_drv_twi.h"
 
+#include "hts221.h"
+
+
 #define ENV_SENS_PWR_PIN                NRF_GPIO_PIN_MAP(0,22)
+#define ENV_SENS_PUP_PIN                NRF_GPIO_PIN_MAP(1,0)
 
 #define DEVICE_NAME                     "Nordic_Template"                       /**< Name of device. Will be included in the advertising data. */
 #define MANUFACTURER_NAME               "NordicSemiconductor"                   /**< Manufacturer. Will be passed to Device Information Service. */
@@ -116,49 +120,41 @@
 
 #define DEAD_BEEF                       0xDEADBEEF                              /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
 
-/* TWI instance ID. */
-#if TWI0_ENABLED
+/* TWI manager instance */
 #define TWI_INSTANCE_ID     0
-#elif TWI1_ENABLED
-#define TWI_INSTANCE_ID     1
-#endif
+NRF_TWI_MNGR_DEF(twi_mngr, 8, TWI_INSTANCE_ID);
 
+/* TWI sensor instance */
+NRF_TWI_SENSOR_DEF(twi_sensor, &twi_mngr, HTS221_MIN_QUEUE_SIZE);
 
+/* HTS221 instance */
+HTS221_INSTANCE_DEF(hts221_sensor, &twi_sensor, HTS221_BASE_ADDRESS);
 
-/* TWI instance. */
-static const nrf_drv_twi_t m_twi = NRF_DRV_TWI_INSTANCE(TWI_INSTANCE_ID);
+APP_TIMER_DEF(hts221_timer);
 
-/**
- * @brief TWI events handler.
- */
-void twi_handler (nrf_drv_twi_evt_t const * p_event, void * p_context)
+static volatile bool hts221_trigger;
+static volatile bool hts221_reg_ready;
+static volatile bool hts221_data_ready;
+
+void hts221_timer_cb (void * p_context)
 {
-    switch (p_event->type)
+    hts221_trigger = true;
+}
+
+void hts221_reg_cb(ret_code_t result, void * p_register_data)
+{
+    if (result == NRF_SUCCESS)
     {
-        default:
-            break;
+        hts221_reg_ready = true;
     }
 }
 
-/**
- * @brief TWI initialization.
- */
-void twi_init (void)
+void hts221_data_cb(ret_code_t result, int16_t * p_data)
 {
-    ret_code_t err_code;
-
-    const nrf_drv_twi_config_t twi_config = {
-       .scl                = 15,
-       .sda                = 14,
-       .frequency          = NRF_DRV_TWI_FREQ_100K,
-       .interrupt_priority = APP_IRQ_PRIORITY_LOW,
-       .clear_bus_init     = true
-    };
-
-    err_code = nrf_drv_twi_init(&m_twi, &twi_config, twi_handler, NULL);
-    APP_ERROR_CHECK(err_code);
-
-    nrf_drv_twi_enable(&m_twi);
+    if (result == NRF_SUCCESS)
+    {
+        hts221_data_ready = true;
+    }
 }
 
 NRF_BLE_GATT_DEF(m_gatt);                                                       /**< GATT module instance. */
@@ -426,6 +422,13 @@ static void application_timers_start(void)
        err_code = app_timer_start(m_app_timer_id, TIMER_INTERVAL, NULL);
        APP_ERROR_CHECK(err_code); */
 
+    ret_code_t err_code;
+
+    err_code = app_timer_create(&hts221_timer, APP_TIMER_MODE_REPEATED, hts221_timer_cb);
+    APP_ERROR_CHECK(err_code);
+
+    err_code = app_timer_start(hts221_timer, APP_TIMER_TICKS(3000), NULL);
+    APP_ERROR_CHECK(err_code);
 }
 
 
@@ -751,38 +754,38 @@ static void advertising_start(bool erase_bonds)
 
 static void env_sensor_init(void)
 {
+    /* Enable pull-up resistors on TWI */
+    nrf_gpio_cfg_output(ENV_SENS_PUP_PIN);
+    nrf_gpio_pin_set(ENV_SENS_PUP_PIN);
+
     /* Enable power to sensors */
     nrf_gpio_cfg_output(ENV_SENS_PWR_PIN);
     nrf_gpio_pin_set(ENV_SENS_PWR_PIN);
 
     nrf_delay_ms(10);
 
-    /* Scan sensors on TWI bus */
-    ret_code_t err_code;
-    uint8_t address;
-    uint8_t sample_data;
-    bool detected_device = false;
+    const nrf_drv_twi_config_t twi_config = {
+       .scl                = 15,
+       .sda                = 14,
+       .frequency          = NRF_DRV_TWI_FREQ_100K,
+       .interrupt_priority = APP_IRQ_PRIORITY_LOW,
+       .clear_bus_init     = true
+    };
 
-    NRF_LOG_INFO("TWI scanner started.");
-    NRF_LOG_FLUSH();
-    twi_init();
+    nrf_twi_mngr_init(&twi_mngr, &twi_config);
+    nrf_twi_sensor_init(&twi_sensor);
 
-    const uint8_t twi_addresses = 127;
-    for (address = 1; address <= twi_addresses; address++)
+    if (hts221_init(&hts221_sensor) == NRF_SUCCESS)
     {
-        err_code = nrf_drv_twi_rx(&m_twi, address, &sample_data, sizeof(sample_data));
-        if (err_code == NRF_SUCCESS)
-        {
-            detected_device = true;
-            NRF_LOG_INFO("TWI device detected at address 0x%x.", address);
-        }
-        NRF_LOG_FLUSH();
+        hts221_pd_enable(&hts221_sensor, true);
+        hts221_heater_enable(&hts221_sensor, false);
+        hts221_boot(&hts221_sensor);
+        hts221_data_rate_cfg(&hts221_sensor, HTS221_ODR_ONESHOT);
+        NRF_LOG_INFO("HTS221 initialized.");
     }
-
-    if (!detected_device)
+    else
     {
-        NRF_LOG_INFO("No device was found.");
-        NRF_LOG_FLUSH();
+        NRF_LOG_INFO("Failed to initialize HTS221.");
     }
 }
 
@@ -816,6 +819,41 @@ int main(void)
     // Enter main loop.
     for (;;)
     {
+        if (hts221_trigger)
+        {
+            hts221_oneshot(&hts221_sensor);
+
+            /* Check if measurement is done */
+            uint8_t status_reg = 0;
+            hts221_status_read(&hts221_sensor, hts221_reg_cb, &status_reg);
+
+            while (!hts221_reg_ready) {idle_state_handle();};
+            hts221_reg_ready = false;
+
+            if (status_reg == 3)
+            {
+                hts221_trigger = false;
+
+                int16_t raw_temp, raw_hum;
+                if (hts221_temp_read(&hts221_sensor, hts221_data_cb, &raw_temp) == NRF_SUCCESS)
+                {
+                    while (!hts221_data_ready){idle_state_handle();};
+                    hts221_data_ready = false;
+                    float temp = hts221_temp_process(&hts221_sensor, raw_temp) / 8.0f;
+                    NRF_LOG_RAW_INFO("HTS221: T: " NRF_LOG_FLOAT_MARKER " °C\n", NRF_LOG_FLOAT(temp));
+                }
+
+                if (hts221_hum_read(&hts221_sensor, hts221_data_cb, &raw_hum) == NRF_SUCCESS)
+                {
+                    while (!hts221_data_ready){idle_state_handle();};
+                    hts221_data_ready = false;
+                    float hum = hts221_hum_process(&hts221_sensor, raw_temp) / 2.0f;
+                    NRF_LOG_RAW_INFO("HTS221: RH: " NRF_LOG_FLOAT_MARKER " %%\n", NRF_LOG_FLOAT(hum));
+                }
+
+            }
+        }
+
         idle_state_handle();
     }
 }
