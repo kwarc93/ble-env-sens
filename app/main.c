@@ -825,33 +825,33 @@ int main(void)
 
             /* Check if measurement is done */
             uint8_t status_reg = 0;
-            hts221_status_read(&hts221_sensor, hts221_reg_cb, &status_reg);
-
-            while (!hts221_reg_ready) {idle_state_handle();};
-            hts221_reg_ready = false;
-
-            if (status_reg == 3)
+            do
             {
-                hts221_trigger = false;
-
-                int16_t raw_temp, raw_hum;
-                if (hts221_temp_read(&hts221_sensor, hts221_data_cb, &raw_temp) == NRF_SUCCESS)
-                {
-                    while (!hts221_data_ready){idle_state_handle();};
-                    hts221_data_ready = false;
-                    float temp = hts221_temp_process(&hts221_sensor, raw_temp) / 8.0f;
-                    NRF_LOG_RAW_INFO("HTS221: T: " NRF_LOG_FLOAT_MARKER " °C\n", NRF_LOG_FLOAT(temp));
-                }
-
-                if (hts221_hum_read(&hts221_sensor, hts221_data_cb, &raw_hum) == NRF_SUCCESS)
-                {
-                    while (!hts221_data_ready){idle_state_handle();};
-                    hts221_data_ready = false;
-                    float hum = hts221_hum_process(&hts221_sensor, raw_temp) / 2.0f;
-                    NRF_LOG_RAW_INFO("HTS221: RH: " NRF_LOG_FLOAT_MARKER " %%\n", NRF_LOG_FLOAT(hum));
-                }
-
+                hts221_status_read(&hts221_sensor, hts221_reg_cb, &status_reg);
+                while (!hts221_reg_ready) {idle_state_handle();};
+                hts221_reg_ready = false;
             }
+            while (status_reg != 3);
+
+            hts221_trigger = false;
+
+            int16_t raw_temp, raw_hum;
+            if (hts221_temp_read(&hts221_sensor, hts221_data_cb, &raw_temp) == NRF_SUCCESS)
+            {
+                while (!hts221_data_ready){idle_state_handle();};
+                hts221_data_ready = false;
+                float temp = hts221_temp_process(&hts221_sensor, raw_temp) / 8.0f;
+                NRF_LOG_RAW_INFO("HTS221: T: " NRF_LOG_FLOAT_MARKER " °C\n", NRF_LOG_FLOAT(temp));
+            }
+
+            if (hts221_hum_read(&hts221_sensor, hts221_data_cb, &raw_hum) == NRF_SUCCESS)
+            {
+                while (!hts221_data_ready){idle_state_handle();};
+                hts221_data_ready = false;
+                float hum = hts221_hum_process(&hts221_sensor, raw_temp) / 2.0f;
+                NRF_LOG_RAW_INFO("HTS221: RH: " NRF_LOG_FLOAT_MARKER " %%\n", NRF_LOG_FLOAT(hum));
+            }
+
         }
 
         idle_state_handle();
