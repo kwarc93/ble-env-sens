@@ -82,6 +82,11 @@
 #include "nrf_log_ctrl.h"
 #include "nrf_log_default_backends.h"
 
+#include "nrf_delay.h"
+#include "nrf_gpio.h"
+#include "nrf_drv_twi.h"
+
+#define ENV_SENS_PWR_PIN                NRF_GPIO_PIN_MAP(0,22)
 
 #define DEVICE_NAME                     "Nordic_Template"                       /**< Name of device. Will be included in the advertising data. */
 #define MANUFACTURER_NAME               "NordicSemiconductor"                   /**< Manufacturer. Will be passed to Device Information Service. */
@@ -111,6 +116,50 @@
 
 #define DEAD_BEEF                       0xDEADBEEF                              /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
 
+/* TWI instance ID. */
+#if TWI0_ENABLED
+#define TWI_INSTANCE_ID     0
+#elif TWI1_ENABLED
+#define TWI_INSTANCE_ID     1
+#endif
+
+
+
+/* TWI instance. */
+static const nrf_drv_twi_t m_twi = NRF_DRV_TWI_INSTANCE(TWI_INSTANCE_ID);
+
+/**
+ * @brief TWI events handler.
+ */
+void twi_handler (nrf_drv_twi_evt_t const * p_event, void * p_context)
+{
+    switch (p_event->type)
+    {
+        default:
+            break;
+    }
+}
+
+/**
+ * @brief TWI initialization.
+ */
+void twi_init (void)
+{
+    ret_code_t err_code;
+
+    const nrf_drv_twi_config_t twi_config = {
+       .scl                = 15,
+       .sda                = 14,
+       .frequency          = NRF_DRV_TWI_FREQ_100K,
+       .interrupt_priority = APP_IRQ_PRIORITY_LOW,
+       .clear_bus_init     = true
+    };
+
+    err_code = nrf_drv_twi_init(&m_twi, &twi_config, twi_handler, NULL);
+    APP_ERROR_CHECK(err_code);
+
+    nrf_drv_twi_enable(&m_twi);
+}
 
 NRF_BLE_GATT_DEF(m_gatt);                                                       /**< GATT module instance. */
 NRF_BLE_QWR_DEF(m_qwr);                                                         /**< Context for the Queued Write module.*/
@@ -700,6 +749,43 @@ static void advertising_start(bool erase_bonds)
     }
 }
 
+static void env_sensor_init(void)
+{
+    /* Enable power to sensors */
+    nrf_gpio_cfg_output(ENV_SENS_PWR_PIN);
+    nrf_gpio_pin_set(ENV_SENS_PWR_PIN);
+
+    nrf_delay_ms(10);
+
+    /* Scan sensors on TWI bus */
+    ret_code_t err_code;
+    uint8_t address;
+    uint8_t sample_data;
+    bool detected_device = false;
+
+    NRF_LOG_INFO("TWI scanner started.");
+    NRF_LOG_FLUSH();
+    twi_init();
+
+    const uint8_t twi_addresses = 127;
+    for (address = 1; address <= twi_addresses; address++)
+    {
+        err_code = nrf_drv_twi_rx(&m_twi, address, &sample_data, sizeof(sample_data));
+        if (err_code == NRF_SUCCESS)
+        {
+            detected_device = true;
+            NRF_LOG_INFO("TWI device detected at address 0x%x.", address);
+        }
+        NRF_LOG_FLUSH();
+    }
+
+    if (!detected_device)
+    {
+        NRF_LOG_INFO("No device was found.");
+        NRF_LOG_FLUSH();
+    }
+}
+
 
 /**@brief Function for application main entry.
  */
@@ -719,6 +805,7 @@ int main(void)
     services_init();
     conn_params_init();
     peer_manager_init();
+    env_sensor_init();
 
     // Start execution.
     NRF_LOG_INFO("Template example started.");

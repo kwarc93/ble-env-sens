@@ -50,12 +50,15 @@ SRC_FILES += \
   $(SDK_ROOT)/components/boards/boards.c \
   $(SDK_ROOT)/integration/nrfx/legacy/nrf_drv_clock.c \
   $(SDK_ROOT)/integration/nrfx/legacy/nrf_drv_uart.c \
+  $(SDK_ROOT)/integration/nrfx/legacy/nrf_drv_twi.c \
   $(SDK_ROOT)/modules/nrfx/soc/nrfx_atomic.c \
   $(SDK_ROOT)/modules/nrfx/drivers/src/nrfx_clock.c \
   $(SDK_ROOT)/modules/nrfx/drivers/src/nrfx_gpiote.c \
   $(SDK_ROOT)/modules/nrfx/drivers/src/prs/nrfx_prs.c \
   $(SDK_ROOT)/modules/nrfx/drivers/src/nrfx_uart.c \
   $(SDK_ROOT)/modules/nrfx/drivers/src/nrfx_uarte.c \
+  $(SDK_ROOT)/modules/nrfx/drivers/src/nrfx_twi.c \
+  $(SDK_ROOT)/modules/nrfx/drivers/src/nrfx_twim.c \
   $(SDK_ROOT)/components/libraries/bsp/bsp.c \
   $(SDK_ROOT)/components/libraries/bsp/bsp_btn_ble.c \
   $(SDK_ROOT)/external/segger_rtt/SEGGER_RTT.c \
@@ -222,7 +225,7 @@ INC_FOLDERS += \
 LIB_FILES += \
 
 # Optimization flags
-OPT = -O3 -g3
+OPT = -Og -g3
 # Uncomment the line below to enable link time optimization
 #OPT += -flto
 
@@ -230,7 +233,7 @@ OPT = -O3 -g3
 CFLAGS += $(OPT)
 CFLAGS += -DAPP_TIMER_V2
 CFLAGS += -DAPP_TIMER_V2_RTC1_ENABLED
-CFLAGS += -DBOARD_PCA10056
+CFLAGS += -DBOARD_PCA10059
 CFLAGS += -DCONFIG_GPIO_AS_PINRESET
 CFLAGS += -DFLOAT_ABI_HARD
 CFLAGS += -DNRF52840_XXAA
