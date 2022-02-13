@@ -87,8 +87,8 @@
 
 #include "env_sensors.h"
 
-#define DEVICE_NAME                     "Nordic_Template"                       /**< Name of device. Will be included in the advertising data. */
-#define MANUFACTURER_NAME               "NordicSemiconductor"                   /**< Manufacturer. Will be passed to Device Information Service. */
+#define DEVICE_NAME                     "ENV-SENS"                              /**< Name of device. Will be included in the advertising data. */
+#define MANUFACTURER_NAME               "KWarc"                                 /**< Manufacturer. Will be passed to Device Information Service. */
 #define APP_ADV_INTERVAL                300                                     /**< The advertising interval (in units of 0.625 ms. This value corresponds to 187.5 ms). */
 
 #define APP_ADV_DURATION                18000                                   /**< The advertising duration (180 seconds) in units of 10 milliseconds. */
@@ -202,6 +202,9 @@ static void timers_init(void)
        ret_code_t err_code;
        err_code = app_timer_create(&m_app_timer_id, APP_TIMER_MODE_REPEATED, timer_timeout_handler);
        APP_ERROR_CHECK(err_code); */
+
+    err_code = app_timer_create(&env_sensors_timer, APP_TIMER_MODE_REPEATED, env_sensors_timer_cb);
+    APP_ERROR_CHECK(err_code);
 }
 
 
@@ -390,9 +393,6 @@ static void application_timers_start(void)
        APP_ERROR_CHECK(err_code); */
 
     ret_code_t err_code;
-
-    err_code = app_timer_create(&env_sensors_timer, APP_TIMER_MODE_REPEATED, env_sensors_timer_cb);
-    APP_ERROR_CHECK(err_code);
 
     err_code = app_timer_start(env_sensors_timer, APP_TIMER_TICKS(1000), NULL);
     APP_ERROR_CHECK(err_code);

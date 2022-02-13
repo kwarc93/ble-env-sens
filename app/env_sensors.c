@@ -25,7 +25,7 @@
 /* private */
 
 NRF_TWI_MNGR_DEF(twi_mngr, 8, TWI_INSTANCE_ID);
-NRF_TWI_SENSOR_DEF(twi_sensor, &twi_mngr, HTS221_MIN_QUEUE_SIZE);
+NRF_TWI_SENSOR_DEF(twi_sensor, &twi_mngr, HTS221_MIN_QUEUE_SIZE * 2);
 HTS221_INSTANCE_DEF(hts221_sensor, &twi_sensor, HTS221_BASE_ADDRESS);
 
 typedef struct
@@ -36,19 +36,10 @@ typedef struct
     int16_t raw_hum;
 } hts221_ctx_t;
 
-//typedef struct
-//{
-//    uint8_t register;
-//    int16_t data;
-//    volatile bool reg_ready;
-//    volatile bool data_ready;
-//} lps22bh_ctx_t;
-//
-//static hts221_ctx_t lps22hb_ctx;
-static hts221_ctx_t hts221_ctx;
+static hts221_ctx_t hts221_ctx = {0};
 
-static env_sens_drdy_cb_t env_sens_drdy_cb;
-static env_sens_data_t env_sens_data;
+static env_sens_drdy_cb_t env_sens_drdy_cb = NULL;
+static env_sens_data_t env_sens_data = {0};;
 
 static void hts221_clear_ctx(void);
 static void hts221_reg_cb(ret_code_t result, void * p_register_data);
@@ -134,7 +125,7 @@ static void hts221_who_am_i_cb(ret_code_t result, void *p_register_data)
         uint8_t who_am_i_reg = *(uint8_t*)p_register_data;
         if (who_am_i_reg == HTS221_WHO_AM_I)
         {
-            /* Sensor is ready - read it */
+            /* Sensor is ready */
             hts221_ctx.ready = true;
             return;
         }
@@ -193,7 +184,7 @@ env_sens_stat_t env_sensors_pwr_on(void)
     /* Enable power to sensors */
     nrf_gpio_pin_set(ENV_SENS_PWR_PIN);
 
-    nrf_delay_ms(5);
+    nrf_delay_ms(10);
 
     return ENV_SENS_OK;
 }
