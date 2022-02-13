@@ -89,6 +89,7 @@ SRC_FILES += \
   $(SDK_ROOT)/components/softdevice/common/nrf_sdh_ble.c \
   $(SDK_ROOT)/components/softdevice/common/nrf_sdh_soc.c \
   $(SDK_ROOT)/components/drivers_ext/hts221/hts221.c \
+  $(SDK_ROOT)/components/drivers_ext/lps22hb/lps22hb.c \
   $(SDK_ROOT)/components/libraries/twi_sensor/nrf_twi_sensor.c \
   $(SDK_ROOT)/components/libraries/twi_mngr/nrf_twi_mngr.c \
   $(SDK_ROOT)/components/libraries/queue/nrf_queue.c \
@@ -226,6 +227,7 @@ INC_FOLDERS += \
   $(SDK_ROOT)/components/libraries/stack_guard \
   $(SDK_ROOT)/components/libraries/log/src \
   $(SDK_ROOT)/components/drivers_ext/hts221 \
+  $(SDK_ROOT)/components/drivers_ext/lps22hb \
   $(SDK_ROOT)/components/libraries/twi_mngr \
   $(SDK_ROOT)/components/libraries/twi_sensor \
   $(SDK_ROOT)/components/libraries/queue \

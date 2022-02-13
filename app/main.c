@@ -394,7 +394,7 @@ static void application_timers_start(void)
 
     ret_code_t err_code;
 
-    err_code = app_timer_start(env_sensors_timer, APP_TIMER_TICKS(1000), NULL);
+    err_code = app_timer_start(env_sensors_timer, APP_TIMER_TICKS(3000), NULL);
     APP_ERROR_CHECK(err_code);
 }
 
@@ -721,7 +721,9 @@ static void advertising_start(bool erase_bonds)
 
 static void env_sensors_drdy_cb(const env_sens_data_t *data)
 {
-    NRF_LOG_RAW_INFO("[ENV SENS] T: " NRF_LOG_FLOAT_MARKER "°C, RH: "NRF_LOG_FLOAT_MARKER"%%\n", NRF_LOG_FLOAT(data->temperature), NRF_LOG_FLOAT(data->humidity));
+    NRF_LOG_RAW_INFO("[ENV SENS] T: " NRF_LOG_FLOAT_MARKER "°C\n", NRF_LOG_FLOAT(data->temperature));
+    NRF_LOG_RAW_INFO("[ENV SENS] RH: " NRF_LOG_FLOAT_MARKER "%%\n", NRF_LOG_FLOAT(data->humidity));
+    NRF_LOG_RAW_INFO("[ENV SENS] P: " NRF_LOG_FLOAT_MARKER "hPa\n", NRF_LOG_FLOAT(data->pressure));
     env_sensors_pwr_off();
 }
 
