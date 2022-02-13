@@ -20,12 +20,13 @@
 #define ENV_SENS_PWR_PIN                NRF_GPIO_PIN_MAP(0,22)
 #define ENV_SENS_PUP_PIN                NRF_GPIO_PIN_MAP(1,0)
 
-#define TWI_INSTANCE_ID                 0
+#define ENV_SENS_TWI_INSTANCE_ID        0
+#define ENV_SENS_USE_LPS22BH_TEMP       1
 
 //-----------------------------------------------------------------------------
 /* private */
 
-NRF_TWI_MNGR_DEF(twi_mngr, 10, TWI_INSTANCE_ID);
+NRF_TWI_MNGR_DEF(twi_mngr, 10, ENV_SENS_TWI_INSTANCE_ID);
 NRF_TWI_SENSOR_DEF(twi_sensor, &twi_mngr, HTS221_MIN_QUEUE_SIZE + LPS22HB_MIN_QUEUE_SIZE);
 
 static env_sens_drdy_cb_t env_sens_drdy_cb = NULL;
@@ -37,7 +38,7 @@ HTS221_INSTANCE_DEF(hts221_sensor, &twi_sensor, HTS221_BASE_ADDRESS);
 
 typedef struct
 {
-    bool ready;
+    volatile bool ready;
     uint8_t reg;
     int16_t raw_temp;
     int16_t raw_hum;
@@ -49,7 +50,7 @@ LPS22HB_INSTANCE_DEF(lps22hb_sensor, &twi_sensor, LPS22HB_BASE_ADDRESS_LOW);
 
 typedef struct
 {
-    bool ready;
+    volatile bool ready;
     uint8_t reg;
     lps22hb_data_t raw_data;
 } lps22hb_ctx_t;
@@ -60,7 +61,8 @@ static lps22hb_ctx_t lps22hb_ctx = {0};
 
 static bool is_data_ready_from_all_sensors(void)
 {
-    return (hts221_ctx.raw_temp != INT16_MIN && hts221_ctx.raw_hum != INT16_MIN && lps22hb_ctx.raw_data.pressure != INT32_MIN);
+    return (hts221_ctx.raw_temp != INT16_MIN && hts221_ctx.raw_hum != INT16_MIN
+            && lps22hb_ctx.raw_data.pressure != INT32_MIN && lps22hb_ctx.raw_data.temperature != INT16_MIN);
 }
 
 static void hts221_clear_ctx(void);
@@ -99,8 +101,10 @@ static void hts221_temp_data_cb(ret_code_t result, int16_t * p_data)
     if (result == NRF_SUCCESS)
     {
         /* Data is ready - process it */
+#if !ENV_SENS_USE_LPS22BH_TEMP
         int16_t temp = *(int16_t*)p_data;
         env_sens_data.temperature = hts221_temp_process(&hts221_sensor, temp) / 8.0f;
+#endif
 
         if (is_data_ready_from_all_sensors())
         {
@@ -160,7 +164,6 @@ static void lps22hb_who_am_i_cb(ret_code_t result, void *p_register_data);
 static void lps22hb_reg_cb(ret_code_t result, void * p_register_data);
 static void lps22hb_drdy_cb(ret_code_t result, lps22hb_data_t * p_raw_data);
 
-
 static void lps22hb_clear_ctx(void)
 {
     lps22hb_ctx.ready = false;
@@ -210,6 +213,9 @@ static void lps22hb_drdy_cb(ret_code_t result, lps22hb_data_t * p_raw_data)
         /* Data is ready - decode it */
         lps22hb_data_decode(p_raw_data, 1);
         env_sens_data.pressure = p_raw_data->pressure / 4096.0f;
+#if ENV_SENS_USE_LPS22BH_TEMP
+        env_sens_data.temperature = p_raw_data->temperature / 100.0f;
+#endif
 
         if (is_data_ready_from_all_sensors())
         {
