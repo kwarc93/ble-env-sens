@@ -84,13 +84,8 @@
 
 #include "nrf_delay.h"
 #include "nrf_gpio.h"
-#include "nrf_drv_twi.h"
 
-#include "hts221.h"
-
-
-#define ENV_SENS_PWR_PIN                NRF_GPIO_PIN_MAP(0,22)
-#define ENV_SENS_PUP_PIN                NRF_GPIO_PIN_MAP(1,0)
+#include "env_sensors.h"
 
 #define DEVICE_NAME                     "Nordic_Template"                       /**< Name of device. Will be included in the advertising data. */
 #define MANUFACTURER_NAME               "NordicSemiconductor"                   /**< Manufacturer. Will be passed to Device Information Service. */
@@ -120,48 +115,20 @@
 
 #define DEAD_BEEF                       0xDEADBEEF                              /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
 
-/* TWI manager instance */
-#define TWI_INSTANCE_ID     0
-NRF_TWI_MNGR_DEF(twi_mngr, 8, TWI_INSTANCE_ID);
-
-/* TWI sensor instance */
-NRF_TWI_SENSOR_DEF(twi_sensor, &twi_mngr, HTS221_MIN_QUEUE_SIZE);
-
-/* HTS221 instance */
-HTS221_INSTANCE_DEF(hts221_sensor, &twi_sensor, HTS221_BASE_ADDRESS);
-
-APP_TIMER_DEF(hts221_timer);
-
-static volatile bool hts221_trigger;
-static volatile bool hts221_reg_ready;
-static volatile bool hts221_data_ready;
-
-void hts221_timer_cb (void * p_context)
-{
-    hts221_trigger = true;
-}
-
-void hts221_reg_cb(ret_code_t result, void * p_register_data)
-{
-    if (result == NRF_SUCCESS)
-    {
-        hts221_reg_ready = true;
-    }
-}
-
-void hts221_data_cb(ret_code_t result, int16_t * p_data)
-{
-    if (result == NRF_SUCCESS)
-    {
-        hts221_data_ready = true;
-    }
-}
-
 NRF_BLE_GATT_DEF(m_gatt);                                                       /**< GATT module instance. */
 NRF_BLE_QWR_DEF(m_qwr);                                                         /**< Context for the Queued Write module.*/
 BLE_ADVERTISING_DEF(m_advertising);                                             /**< Advertising module instance. */
 
 static uint16_t m_conn_handle = BLE_CONN_HANDLE_INVALID;                        /**< Handle of the current connection. */
+
+APP_TIMER_DEF(env_sensors_timer);
+
+static volatile bool env_sensors_trigger;
+
+void env_sensors_timer_cb(void * p_context)
+{
+    env_sensors_trigger = true;
+}
 
 /* YOUR_JOB: Declare all services structure your application is using
  *  BLE_XYZ_DEF(m_xyz);
@@ -424,10 +391,10 @@ static void application_timers_start(void)
 
     ret_code_t err_code;
 
-    err_code = app_timer_create(&hts221_timer, APP_TIMER_MODE_REPEATED, hts221_timer_cb);
+    err_code = app_timer_create(&env_sensors_timer, APP_TIMER_MODE_REPEATED, env_sensors_timer_cb);
     APP_ERROR_CHECK(err_code);
 
-    err_code = app_timer_start(hts221_timer, APP_TIMER_TICKS(3000), NULL);
+    err_code = app_timer_start(env_sensors_timer, APP_TIMER_TICKS(3000), NULL);
     APP_ERROR_CHECK(err_code);
 }
 
@@ -752,43 +719,11 @@ static void advertising_start(bool erase_bonds)
     }
 }
 
-static void env_sensor_init(void)
+static void env_sensors_drdy_cb(const env_sens_data_t *data)
 {
-    /* Enable pull-up resistors on TWI */
-    nrf_gpio_cfg_output(ENV_SENS_PUP_PIN);
-    nrf_gpio_pin_set(ENV_SENS_PUP_PIN);
-
-    /* Enable power to sensors */
-    nrf_gpio_cfg_output(ENV_SENS_PWR_PIN);
-    nrf_gpio_pin_set(ENV_SENS_PWR_PIN);
-
-    nrf_delay_ms(10);
-
-    const nrf_drv_twi_config_t twi_config = {
-       .scl                = 15,
-       .sda                = 14,
-       .frequency          = NRF_DRV_TWI_FREQ_100K,
-       .interrupt_priority = APP_IRQ_PRIORITY_LOW,
-       .clear_bus_init     = true
-    };
-
-    nrf_twi_mngr_init(&twi_mngr, &twi_config);
-    nrf_twi_sensor_init(&twi_sensor);
-
-    if (hts221_init(&hts221_sensor) == NRF_SUCCESS)
-    {
-        hts221_pd_enable(&hts221_sensor, true);
-        hts221_heater_enable(&hts221_sensor, false);
-        hts221_boot(&hts221_sensor);
-        hts221_data_rate_cfg(&hts221_sensor, HTS221_ODR_ONESHOT);
-        NRF_LOG_INFO("HTS221 initialized.");
-    }
-    else
-    {
-        NRF_LOG_INFO("Failed to initialize HTS221.");
-    }
+    NRF_LOG_RAW_INFO("[ENV SENS] T: " NRF_LOG_FLOAT_MARKER "°C, RH: "NRF_LOG_FLOAT_MARKER"%%\n", NRF_LOG_FLOAT(data->temperature), NRF_LOG_FLOAT(data->humidity));
+//    env_sensors_pwr_off();
 }
-
 
 /**@brief Function for application main entry.
  */
@@ -808,50 +743,21 @@ int main(void)
     services_init();
     conn_params_init();
     peer_manager_init();
-    env_sensor_init();
+    env_sensors_init();
 
     // Start execution.
     NRF_LOG_INFO("Template example started.");
     application_timers_start();
-
     advertising_start(erase_bonds);
 
     // Enter main loop.
     for (;;)
     {
-        if (hts221_trigger)
+        if (env_sensors_trigger)
         {
-            hts221_oneshot(&hts221_sensor);
-
-            /* Check if measurement is done */
-            uint8_t status_reg = 0;
-            do
-            {
-                hts221_status_read(&hts221_sensor, hts221_reg_cb, &status_reg);
-                while (!hts221_reg_ready) {idle_state_handle();};
-                hts221_reg_ready = false;
-            }
-            while (status_reg != 3);
-
-            hts221_trigger = false;
-
-            int16_t raw_temp, raw_hum;
-            if (hts221_temp_read(&hts221_sensor, hts221_data_cb, &raw_temp) == NRF_SUCCESS)
-            {
-                while (!hts221_data_ready){idle_state_handle();};
-                hts221_data_ready = false;
-                float temp = hts221_temp_process(&hts221_sensor, raw_temp) / 8.0f;
-                NRF_LOG_RAW_INFO("HTS221: T: " NRF_LOG_FLOAT_MARKER " °C\n", NRF_LOG_FLOAT(temp));
-            }
-
-            if (hts221_hum_read(&hts221_sensor, hts221_data_cb, &raw_hum) == NRF_SUCCESS)
-            {
-                while (!hts221_data_ready){idle_state_handle();};
-                hts221_data_ready = false;
-                float hum = hts221_hum_process(&hts221_sensor, raw_temp) / 2.0f;
-                NRF_LOG_RAW_INFO("HTS221: RH: " NRF_LOG_FLOAT_MARKER " %%\n", NRF_LOG_FLOAT(hum));
-            }
-
+            env_sensors_trigger = false;
+            env_sensors_pwr_on();
+            env_sensors_trigger_measurement(env_sensors_drdy_cb);
         }
 
         idle_state_handle();

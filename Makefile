@@ -4,14 +4,15 @@ OUTPUT_DIRECTORY := build
 
 # Enter root of NRF5 SDK (v17.1.0)
 SDK_ROOT := /home/kwarc/Dokumenty/Mikrokontrolery/NRF52/nRF5-SDK-17.1.0
-PROJ_DIR := ./app
+PROJ_DIR := .
 
 $(OUTPUT_DIRECTORY)/nrf52840_xxaa.out: \
   LINKER_SCRIPT  := linker_script.ld
 
 # Source files common to all targets
 SRC_FILES += \
-  $(PROJ_DIR)/main.c \
+  $(PROJ_DIR)/app/main.c \
+  $(PROJ_DIR)/app/env_sensors.c \
   $(SDK_ROOT)/modules/nrfx/mdk/gcc_startup_nrf52840.S \
   $(SDK_ROOT)/components/libraries/log/src/nrf_log_backend_rtt.c \
   $(SDK_ROOT)/components/libraries/log/src/nrf_log_backend_serial.c \
@@ -94,7 +95,8 @@ SRC_FILES += \
 
 # Include folders common to all targets
 INC_FOLDERS += \
-  ./config \
+  $(PROJ_DIR)/app \
+  $(PROJ_DIR)/config \
   $(SDK_ROOT)/components/nfc/ndef/generic/message \
   $(SDK_ROOT)/components/nfc/t2t_lib \
   $(SDK_ROOT)/components/nfc/t4t_parser/hl_detection_procedure \
