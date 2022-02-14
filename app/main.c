@@ -61,6 +61,9 @@
 #include "ble.h"
 #include "ble_hci.h"
 #include "ble_srv_common.h"
+#include "ble_bas.h"
+#include "ble_ess.h"
+#include "ble_dis.h"
 #include "ble_advdata.h"
 #include "ble_advertising.h"
 #include "ble_conn_params.h"
@@ -118,6 +121,7 @@
 NRF_BLE_GATT_DEF(m_gatt);                                                       /**< GATT module instance. */
 NRF_BLE_QWR_DEF(m_qwr);                                                         /**< Context for the Queued Write module.*/
 BLE_ADVERTISING_DEF(m_advertising);                                             /**< Advertising module instance. */
+BLE_ESS_DEF(m_ess);
 
 static uint16_t m_conn_handle = BLE_CONN_HANDLE_INVALID;                        /**< Handle of the current connection. */
 
@@ -137,7 +141,8 @@ void env_sensors_timer_cb(void * p_context)
 // YOUR_JOB: Use UUIDs for service(s) used in your application.
 static ble_uuid_t m_adv_uuids[] =                                               /**< Universally unique service identifiers. */
 {
-    {BLE_UUID_DEVICE_INFORMATION_SERVICE, BLE_UUID_TYPE_BLE}
+    {BLE_UUID_DEVICE_INFORMATION_SERVICE, BLE_UUID_TYPE_BLE},
+    {BLE_UUID_ENVIRONMENTAL_SENSING_SERVICE, BLE_UUID_TYPE_BLE},
 };
 
 
@@ -273,14 +278,14 @@ static void nrf_qwr_error_handler(uint32_t nrf_error)
  * @param[in]   p_yy_service   YY Service structure.
  * @param[in]   p_evt          Event received from the YY Service.
  *
- *
-static void on_yys_evt(ble_yy_service_t     * p_yy_service,
-                       ble_yy_service_evt_t * p_evt)
+ */
+static void on_ess_evt(ble_ess_t *p_ess, ble_ess_evt_t *p_evt)
 {
     switch (p_evt->evt_type)
     {
-        case BLE_YY_NAME_EVT_WRITE:
-            APPL_LOG("[APPL]: charact written with value %s. ", p_evt->params.char_xx.value.p_str);
+        case BLE_ESS_EVT_NOTIFICATION_DISABLED:
+            break;
+        case BLE_ESS_EVT_NOTIFICATION_ENABLED:
             break;
 
         default:
@@ -288,7 +293,6 @@ static void on_yys_evt(ble_yy_service_t     * p_yy_service,
             break;
     }
 }
-*/
 
 /**@brief Function for initializing services that will be used by the application.
  */
@@ -325,6 +329,14 @@ static void services_init(void)
        err_code = ble_yy_service_init(&yys_init, &yy_init);
        APP_ERROR_CHECK(err_code);
      */
+
+    ble_ess_init_t ess_init;
+    memset(&ess_init, 0, sizeof(ess_init));
+
+    ess_init.evt_handler = on_ess_evt;
+
+    err_code = ble_ess_init(&m_ess, &ess_init);
+    APP_ERROR_CHECK(err_code);
 }
 
 
