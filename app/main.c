@@ -54,6 +54,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+#include <math.h>
 
 #include "nordic_common.h"
 #include "nrf.h"
@@ -334,6 +335,9 @@ static void services_init(void)
     memset(&ess_init, 0, sizeof(ess_init));
 
     ess_init.evt_handler = on_ess_evt;
+    ess_init.feature |= BLE_ESS_FEATURE_TEMPERATURE_BIT;
+    ess_init.feature |= BLE_ESS_FEATURE_HUMIDITY_BIT;
+    ess_init.feature |= BLE_ESS_FEATURE_PRESSURE_BIT;
 
     err_code = ble_ess_init(&m_ess, &ess_init);
     APP_ERROR_CHECK(err_code);
@@ -736,6 +740,17 @@ static void env_sensors_drdy_cb(const env_sens_data_t *data)
     NRF_LOG_RAW_INFO("[ENV SENS] T: " NRF_LOG_FLOAT_MARKER "°C\n", NRF_LOG_FLOAT(data->temperature));
     NRF_LOG_RAW_INFO("[ENV SENS] RH: " NRF_LOG_FLOAT_MARKER "%%\n", NRF_LOG_FLOAT(data->humidity));
     NRF_LOG_RAW_INFO("[ENV SENS] P: " NRF_LOG_FLOAT_MARKER "hPa\n", NRF_LOG_FLOAT(data->pressure));
+
+    ble_ess_meas_t ess_meas = {0};
+    ess_meas.is_temperature_data_present = true;
+    ess_meas.temperature = lroundf(data->temperature * 100.0f);
+    ess_meas.is_humidity_data_present = true;
+    ess_meas.humidity = lroundf(data->humidity * 100.0f);
+    ess_meas.is_pressure_data_present = true;
+    ess_meas.pressure = lroundf(data->pressure * 1000.0f);
+
+    ble_ess_measurement_send(&m_ess, &ess_meas);
+
     env_sensors_pwr_off();
 }
 
