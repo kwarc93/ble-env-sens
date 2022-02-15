@@ -236,13 +236,15 @@ static void lps22hb_drdy_cb(ret_code_t result, lps22hb_data_t * p_raw_data)
 
 env_sens_stat_t env_sensors_init(void)
 {
-    /* Config  pull-up resistors on TWI */
+    /* Config & enable pull-up resistors on TWI */
     nrf_gpio_cfg_output(ENV_SENS_PUP_PIN);
+    nrf_gpio_pin_set(ENV_SENS_PUP_PIN);
 
-    /* Config  power to sensors */
+    /* Config & enable power to sensors */
     nrf_gpio_cfg_output(ENV_SENS_PWR_PIN);
+    nrf_gpio_pin_set(ENV_SENS_PWR_PIN);
 
-    env_sensors_pwr_on();
+    nrf_delay_ms(10);
 
     const nrf_drv_twi_config_t twi_config = {
        .scl                = 15,
@@ -256,57 +258,38 @@ env_sens_stat_t env_sensors_init(void)
     result |= nrf_twi_mngr_init(&twi_mngr, &twi_config);
     result |= nrf_twi_sensor_init(&twi_sensor);
 
-    result |= lps22hb_init(&lps22hb_sensor);
     result |= lps22hb_who_am_i_read(&lps22hb_sensor, lps22hb_who_am_i_cb, &lps22hb_ctx.reg);
-
-    result |= hts221_init(&hts221_sensor);
     result |= hts221_who_am_i_read(&hts221_sensor, hts221_who_am_i_cb, &hts221_ctx.reg);
 
     while (!hts221_ctx.ready || !lps22hb_ctx.ready);
 
+    result |= hts221_init(&hts221_sensor);
+    result |= lps22hb_init(&lps22hb_sensor);
+
+    result |= hts221_pd_enable(&hts221_sensor, true);
+    nrf_delay_ms(5);
+
     hts221_clear_ctx();
     lps22hb_clear_ctx();
-
-    env_sensors_pwr_off();
 
     return (result == NRF_SUCCESS) ? ENV_SENS_OK : ENV_SENS_ERROR;
 }
 
 env_sens_stat_t env_sensors_deinit(void)
 {
-    /* TODO */
-    return ENV_SENS_OK;
-}
+    nrf_twi_mngr_uninit(&twi_mngr);
 
-env_sens_stat_t env_sensors_pwr_on(void)
-{
-    /* Enable pull-up resistors on TWI */
-    nrf_gpio_pin_set(ENV_SENS_PUP_PIN);
-
-    /* Enable power to sensors */
-    nrf_gpio_pin_set(ENV_SENS_PWR_PIN);
-
-    nrf_delay_ms(10);
-
-    return ENV_SENS_OK;
-}
-
-env_sens_stat_t env_sensors_pwr_off(void)
-{
     /* Disable power to sensors */
-//    nrf_gpio_pin_clear(ENV_SENS_PWR_PIN);
+    nrf_gpio_cfg_default(ENV_SENS_PWR_PIN);
 
     /* Disable pull-up resistors on TWI */
-//    nrf_gpio_pin_clear(ENV_SENS_PUP_PIN);
+    nrf_gpio_cfg_default(ENV_SENS_PUP_PIN);
 
     return ENV_SENS_OK;
 }
 
 env_sens_stat_t env_sensors_trigger_measurement(env_sens_drdy_cb_t drdy_cb)
 {
-
-    hts221_pd_enable(&hts221_sensor, true);
-    nrf_delay_ms(5);
     hts221_data_rate_cfg(&hts221_sensor, HTS221_ODR_ONESHOT);
 
     hts221_clear_ctx();

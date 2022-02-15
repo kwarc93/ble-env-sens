@@ -26,8 +26,6 @@ typedef void (*env_sens_drdy_cb_t)(const env_sens_data_t *data);
 
 env_sens_stat_t env_sensors_init(void);
 env_sens_stat_t env_sensors_deinit(void);
-env_sens_stat_t env_sensors_pwr_on(void);
-env_sens_stat_t env_sensors_pwr_off(void);
 env_sens_stat_t env_sensors_trigger_measurement(env_sens_drdy_cb_t drdy_cb);
 env_sens_stat_t env_sensors_get_data(env_sens_data_t *data);
 

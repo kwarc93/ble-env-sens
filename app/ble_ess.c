@@ -97,17 +97,18 @@ uint32_t ble_ess_init(ble_ess_t * p_ess, const ble_ess_init_t * p_ess_init)
     VERIFY_PARAM_NOT_NULL(p_ess);
     VERIFY_PARAM_NOT_NULL(p_ess_init);
 
-    uint32_t              err_code;
-    ble_uuid_t            ble_uuid;
-    ble_add_char_params_t add_char_params;
-    uint8_t               init_value_encoded[MAX_ESS_LEN];
-    ble_ess_meas_t        initial_meas = {0};
+    uint32_t                err_code;
+    ble_uuid_t              ble_uuid;
+    ble_add_char_params_t   add_char_params;
+    ble_add_descr_params_t  add_descr_params;
+    uint8_t                 init_value_encoded[MAX_ESS_LEN];
+    ble_ess_meas_t          initial_meas = {0};
 
     // Initialize service structure
+    p_ess->conn_handle   = BLE_CONN_HANDLE_INVALID;
     p_ess->evt_handler   = p_ess_init->evt_handler;
 //    p_ess->p_gatt_queue  = p_ess_init->p_gatt_queue;
 //    p_ess->error_handler = p_ess_init->error_handler;
-    p_ess->conn_handle   = BLE_CONN_HANDLE_INVALID;
     p_ess->feature       = p_ess_init->feature;
 
     // Add service
@@ -128,7 +129,6 @@ uint32_t ble_ess_init(ble_ess_t * p_ess, const ble_ess_init_t * p_ess_init)
         add_char_params.init_len            = uint16_encode(initial_meas.temperature, init_value_encoded);
         add_char_params.max_len             = sizeof(initial_meas.temperature);
         add_char_params.p_init_value        = init_value_encoded;
-        add_char_params.is_var_len          = false;
         add_char_params.char_props.read     = 1;
         add_char_params.char_props.notify   = 1;
         add_char_params.read_access         = SEC_OPEN;
@@ -139,6 +139,18 @@ uint32_t ble_ess_init(ble_ess_t * p_ess, const ble_ess_init_t * p_ess_init)
         {
             return err_code;
         }
+
+        // TODO: Add temperature measurement descriptor
+        memset(&add_descr_params, 0, sizeof(add_descr_params));
+
+//        add_descr_params.uuid = 0x290C;
+//        add_descr_params.read_access = SEC_OPEN;
+//
+//        err_code = descriptor_add(p_ess->temperature_handles.value_handle, &add_descr_params, &p_ess->temperature_handles.sccd_handle);
+//        if (err_code != NRF_SUCCESS)
+//        {
+//            return err_code;
+//        }
     }
 
     if (p_ess->feature & BLE_ESS_FEATURE_HUMIDITY_BIT)
@@ -150,7 +162,6 @@ uint32_t ble_ess_init(ble_ess_t * p_ess, const ble_ess_init_t * p_ess_init)
         add_char_params.init_len            = uint16_encode(initial_meas.humidity, init_value_encoded);
         add_char_params.max_len             = sizeof(initial_meas.humidity);
         add_char_params.p_init_value        = init_value_encoded;
-        add_char_params.is_var_len          = false;
         add_char_params.char_props.read     = 1;
         add_char_params.char_props.notify   = 1;
         add_char_params.read_access         = SEC_OPEN;
@@ -172,7 +183,6 @@ uint32_t ble_ess_init(ble_ess_t * p_ess, const ble_ess_init_t * p_ess_init)
         add_char_params.init_len            = uint32_encode(initial_meas.pressure, init_value_encoded);
         add_char_params.max_len             = sizeof(initial_meas.pressure);
         add_char_params.p_init_value        = init_value_encoded;
-        add_char_params.is_var_len          = false;
         add_char_params.char_props.read     = 1;
         add_char_params.char_props.notify   = 1;
         add_char_params.read_access         = SEC_OPEN;

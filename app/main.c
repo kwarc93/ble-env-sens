@@ -91,10 +91,12 @@
 
 #include "env_sensors.h"
 
+
 #define DEVICE_NAME                     "ENV-SENS"                              /**< Name of device. Will be included in the advertising data. */
 #define MANUFACTURER_NAME               "KWarc"                                 /**< Manufacturer. Will be passed to Device Information Service. */
 #define APP_ADV_INTERVAL                300                                     /**< The advertising interval (in units of 0.625 ms. This value corresponds to 187.5 ms). */
 
+#define APP_USE_BSP                     0
 #define APP_ADV_DURATION                18000                                   /**< The advertising duration (180 seconds) in units of 10 milliseconds. */
 #define APP_BLE_OBSERVER_PRIO           3                                       /**< Application's BLE observer priority. You shouldn't need to modify this value. */
 #define APP_BLE_CONN_CFG_TAG            1                                       /**< A tag identifying the SoftDevice BLE configuration. */
@@ -125,6 +127,8 @@ BLE_ADVERTISING_DEF(m_advertising);                                             
 BLE_ESS_DEF(m_ess);
 
 static uint16_t m_conn_handle = BLE_CONN_HANDLE_INVALID;                        /**< Handle of the current connection. */
+
+static volatile bool client_connected = false;
 
 APP_TIMER_DEF(env_sensors_timer);
 
@@ -407,11 +411,6 @@ static void application_timers_start(void)
        ret_code_t err_code;
        err_code = app_timer_start(m_app_timer_id, TIMER_INTERVAL, NULL);
        APP_ERROR_CHECK(err_code); */
-
-    ret_code_t err_code;
-
-    err_code = app_timer_start(env_sensors_timer, APP_TIMER_TICKS(3000), NULL);
-    APP_ERROR_CHECK(err_code);
 }
 
 
@@ -422,13 +421,14 @@ static void application_timers_start(void)
 static void sleep_mode_enter(void)
 {
     ret_code_t err_code;
-
+#if APP_USE_BSP
     err_code = bsp_indication_set(BSP_INDICATE_IDLE);
     APP_ERROR_CHECK(err_code);
 
     // Prepare wakeup buttons.
     err_code = bsp_btn_ble_sleep_mode_prepare();
     APP_ERROR_CHECK(err_code);
+#endif
 
     // Go to system-off mode (this function will not return; wakeup will cause a reset).
     err_code = sd_power_system_off();
@@ -444,14 +444,16 @@ static void sleep_mode_enter(void)
  */
 static void on_adv_evt(ble_adv_evt_t ble_adv_evt)
 {
-    ret_code_t err_code;
 
     switch (ble_adv_evt)
     {
         case BLE_ADV_EVT_FAST:
             NRF_LOG_INFO("Fast advertising.");
+#if APP_USE_BSP
+            ret_code_t err_code;
             err_code = bsp_indication_set(BSP_INDICATE_ADVERTISING);
             APP_ERROR_CHECK(err_code);
+#endif
             break;
 
         case BLE_ADV_EVT_IDLE:
@@ -477,13 +479,17 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context)
     {
         case BLE_GAP_EVT_DISCONNECTED:
             NRF_LOG_INFO("Disconnected.");
+            client_connected = false;
             // LED indication will be changed when advertising starts.
             break;
 
         case BLE_GAP_EVT_CONNECTED:
             NRF_LOG_INFO("Connected.");
+            client_connected = true;
+#if APP_USE_BSP
             err_code = bsp_indication_set(BSP_INDICATE_CONNECTED);
             APP_ERROR_CHECK(err_code);
+#endif
             m_conn_handle = p_ble_evt->evt.gap_evt.conn_handle;
             err_code = nrf_ble_qwr_conn_handle_assign(&m_qwr, m_conn_handle);
             APP_ERROR_CHECK(err_code);
@@ -596,7 +602,7 @@ static void delete_bonds(void)
     APP_ERROR_CHECK(err_code);
 }
 
-
+#if APP_USE_BSP
 /**@brief Function for handling events from the BSP module.
  *
  * @param[in]   event   Event generated when button is pressed.
@@ -635,7 +641,7 @@ static void bsp_event_handler(bsp_event_t event)
             break;
     }
 }
-
+#endif
 
 /**@brief Function for initializing the Advertising functionality.
  */
@@ -664,7 +670,7 @@ static void advertising_init(void)
     ble_advertising_conn_cfg_tag_set(&m_advertising, APP_BLE_CONN_CFG_TAG);
 }
 
-
+#if APP_USE_BSP
 /**@brief Function for initializing buttons and leds.
  *
  * @param[out] p_erase_bonds  Will be true if the clear bonding button was pressed to wake the application up.
@@ -682,7 +688,7 @@ static void buttons_leds_init(bool * p_erase_bonds)
 
     *p_erase_bonds = (startup_event == BSP_EVENT_CLEAR_BONDING_DATA);
 }
-
+#endif
 
 /**@brief Function for initializing the nrf log module.
  */
@@ -750,20 +756,20 @@ static void env_sensors_drdy_cb(const env_sens_data_t *data)
     ess_meas.pressure = lroundf(data->pressure * 1000.0f);
 
     ble_ess_measurement_send(&m_ess, &ess_meas);
-
-    env_sensors_pwr_off();
 }
 
 /**@brief Function for application main entry.
  */
 int main(void)
 {
-    bool erase_bonds;
+    bool erase_bonds = false;
 
     // Initialize.
     log_init();
     timers_init();
+#if APP_USE_BSP
     buttons_leds_init(&erase_bonds);
+#endif
     power_management_init();
     ble_stack_init();
     gap_params_init();
@@ -772,20 +778,43 @@ int main(void)
     services_init();
     conn_params_init();
     peer_manager_init();
-    env_sensors_init();
+    env_sensors_deinit();
 
     // Start execution.
     NRF_LOG_INFO("Template example started.");
     application_timers_start();
     advertising_start(erase_bonds);
 
+    bool client_connected_prev_state = client_connected;
+
     // Enter main loop.
     for (;;)
     {
-        if (env_sensors_trigger)
+        if (client_connected != client_connected_prev_state)
+        {
+            client_connected_prev_state = client_connected;
+
+            if (client_connected)
+            {
+                env_sensors_init();
+
+                ret_code_t err_code;
+                err_code = app_timer_start(env_sensors_timer, APP_TIMER_TICKS(5000), NULL);
+                APP_ERROR_CHECK(err_code);
+            }
+            else
+            {
+                ret_code_t err_code;
+                err_code = app_timer_stop(env_sensors_timer);
+                APP_ERROR_CHECK(err_code);
+
+                env_sensors_deinit();
+            }
+        }
+
+        if (client_connected && env_sensors_trigger)
         {
             env_sensors_trigger = false;
-            env_sensors_pwr_on();
             env_sensors_trigger_measurement(env_sensors_drdy_cb);
         }
 
