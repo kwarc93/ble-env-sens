@@ -6162,7 +6162,7 @@
 
 
 #ifndef NRF_TWI_SENSOR_ENABLED
-#define NRF_TWI_SENSOR_ENABLED 0
+#define NRF_TWI_SENSOR_ENABLED 1
 #endif
 
 // </h>

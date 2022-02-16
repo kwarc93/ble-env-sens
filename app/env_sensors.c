@@ -9,6 +9,7 @@
 
 #include <stdbool.h>
 
+#include "nrf_pwr_mgmt.h"
 #include "nrf_gpio.h"
 #include "nrf_delay.h"
 #include "hts221.h"
@@ -251,7 +252,8 @@ env_sens_stat_t env_sensors_init(void)
        .sda                = 14,
        .frequency          = NRF_DRV_TWI_FREQ_100K,
        .interrupt_priority = APP_IRQ_PRIORITY_LOW,
-       .clear_bus_init     = true
+       .clear_bus_init     = true,
+       .hold_bus_uninit    = false,
     };
 
     ret_code_t result = NRF_SUCCESS;
@@ -261,7 +263,10 @@ env_sens_stat_t env_sensors_init(void)
     result |= lps22hb_who_am_i_read(&lps22hb_sensor, lps22hb_who_am_i_cb, &lps22hb_ctx.reg);
     result |= hts221_who_am_i_read(&hts221_sensor, hts221_who_am_i_cb, &hts221_ctx.reg);
 
-    while (!hts221_ctx.ready || !lps22hb_ctx.ready);
+    while (!hts221_ctx.ready || !lps22hb_ctx.ready)
+    {
+        nrf_pwr_mgmt_run();
+    }
 
     result |= hts221_init(&hts221_sensor);
     result |= lps22hb_init(&lps22hb_sensor);

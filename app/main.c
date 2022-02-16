@@ -94,17 +94,17 @@
 
 #define DEVICE_NAME                     "ENV-SENS"                              /**< Name of device. Will be included in the advertising data. */
 #define MANUFACTURER_NAME               "KWarc"                                 /**< Manufacturer. Will be passed to Device Information Service. */
-#define APP_ADV_INTERVAL                300                                     /**< The advertising interval (in units of 0.625 ms. This value corresponds to 187.5 ms). */
+#define APP_ADV_INTERVAL                MSEC_TO_UNITS(1000, UNIT_0_625_MS)      /**< The advertising interval. */
 
 #define APP_USE_BSP                     0
-#define APP_ADV_DURATION                18000                                   /**< The advertising duration (180 seconds) in units of 10 milliseconds. */
+#define APP_ADV_DURATION                0                                       /**< The advertising duration (180 seconds) in units of 10 milliseconds. */
 #define APP_BLE_OBSERVER_PRIO           3                                       /**< Application's BLE observer priority. You shouldn't need to modify this value. */
 #define APP_BLE_CONN_CFG_TAG            1                                       /**< A tag identifying the SoftDevice BLE configuration. */
 
-#define MIN_CONN_INTERVAL               MSEC_TO_UNITS(100, UNIT_1_25_MS)        /**< Minimum acceptable connection interval (0.1 seconds). */
-#define MAX_CONN_INTERVAL               MSEC_TO_UNITS(200, UNIT_1_25_MS)        /**< Maximum acceptable connection interval (0.2 second). */
-#define SLAVE_LATENCY                   0                                       /**< Slave latency. */
-#define CONN_SUP_TIMEOUT                MSEC_TO_UNITS(4000, UNIT_10_MS)         /**< Connection supervisory timeout (4 seconds). */
+#define MIN_CONN_INTERVAL               MSEC_TO_UNITS(500, UNIT_1_25_MS)        /**< Minimum acceptable connection interval. */
+#define MAX_CONN_INTERVAL               MSEC_TO_UNITS(1000, UNIT_1_25_MS)       /**< Maximum acceptable connection interval. */
+#define SLAVE_LATENCY                   1                                       /**< Slave latency. */
+#define CONN_SUP_TIMEOUT                MSEC_TO_UNITS(6000, UNIT_10_MS)         /**< Connection supervisory timeout. */
 
 #define FIRST_CONN_PARAMS_UPDATE_DELAY  APP_TIMER_TICKS(5000)                   /**< Time from initiating event (connect or start of notification) to first time sd_ble_gap_conn_param_update is called (5 seconds). */
 #define NEXT_CONN_PARAMS_UPDATE_DELAY   APP_TIMER_TICKS(30000)                  /**< Time between each call to sd_ble_gap_conn_param_update after the first call (30 seconds). */
@@ -762,7 +762,7 @@ static void env_sensors_drdy_cb(const env_sens_data_t *data)
  */
 int main(void)
 {
-    bool erase_bonds = false;
+    bool erase_bonds = true;
 
     // Initialize.
     log_init();
@@ -779,6 +779,9 @@ int main(void)
     conn_params_init();
     peer_manager_init();
     env_sensors_deinit();
+
+    // Enable DC/DC converter
+    APP_ERROR_CHECK(sd_power_dcdc_mode_set(NRF_POWER_DCDC_ENABLE));
 
     // Start execution.
     NRF_LOG_INFO("Template example started.");
@@ -797,6 +800,7 @@ int main(void)
             if (client_connected)
             {
                 env_sensors_init();
+                env_sensors_trigger = true;
 
                 ret_code_t err_code;
                 err_code = app_timer_start(env_sensors_timer, APP_TIMER_TICKS(5000), NULL);
