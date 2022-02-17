@@ -20,6 +20,8 @@
 
 #define ENV_SENS_PWR_PIN                NRF_GPIO_PIN_MAP(0,22)
 #define ENV_SENS_PUP_PIN                NRF_GPIO_PIN_MAP(1,0)
+#define ENV_SENS_TWI_SCL_PIN            NRF_GPIO_PIN_MAP(0,15)
+#define ENV_SENS_TWI_SDA_PIN            NRF_GPIO_PIN_MAP(0,14)
 
 #define ENV_SENS_TWI_INSTANCE_ID        0
 #define ENV_SENS_USE_LPS22BH_TEMP       1
@@ -248,12 +250,11 @@ env_sens_stat_t env_sensors_init(void)
     nrf_delay_ms(10);
 
     const nrf_drv_twi_config_t twi_config = {
-       .scl                = 15,
-       .sda                = 14,
+       .scl                = ENV_SENS_TWI_SCL_PIN,
+       .sda                = ENV_SENS_TWI_SDA_PIN,
        .frequency          = NRF_DRV_TWI_FREQ_100K,
        .interrupt_priority = APP_IRQ_PRIORITY_LOW,
        .clear_bus_init     = true,
-       .hold_bus_uninit    = false,
     };
 
     ret_code_t result = NRF_SUCCESS;
@@ -284,11 +285,14 @@ env_sens_stat_t env_sensors_deinit(void)
 {
     nrf_twi_mngr_uninit(&twi_mngr);
 
+    nrf_gpio_cfg_default(ENV_SENS_TWI_SCL_PIN);
+    nrf_gpio_cfg_default(ENV_SENS_TWI_SDA_PIN);
+
     /* Disable power to sensors */
     nrf_gpio_cfg_default(ENV_SENS_PWR_PIN);
 
     /* Disable pull-up resistors on TWI */
-    nrf_gpio_cfg_default(ENV_SENS_PUP_PIN);
+    nrf_gpio_pin_clear(ENV_SENS_PUP_PIN);
 
     return ENV_SENS_OK;
 }

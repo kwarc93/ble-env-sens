@@ -778,7 +778,6 @@ int main(void)
     services_init();
     conn_params_init();
     peer_manager_init();
-    env_sensors_deinit();
 
     // Enable DC/DC converter
     APP_ERROR_CHECK(sd_power_dcdc_mode_set(NRF_POWER_DCDC_ENABLE));
