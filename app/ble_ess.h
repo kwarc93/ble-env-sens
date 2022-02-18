@@ -28,7 +28,7 @@ NRF_SDH_BLE_OBSERVER(_name ## _obs,             \
                      2,                         \
                      ble_ess_on_ble_evt, &_name)
 
-#define BLE_UUID_ENVIRONMENTAL_SENSING_SERVICE 0x181A
+#define BLE_UUID_ENVIRONMENTAL_SENSING_SERVICE  0x181A
 
 /**
  * @brief BLE_ESS_FEATURES ESS feature bits
@@ -41,14 +41,14 @@ NRF_SDH_BLE_OBSERVER(_name ## _obs,             \
 /** @brief ESS event type. */
 typedef enum
 {
-    BLE_ESS_EVT_NOTIFICATION_ENABLED,                                  /**< ESS value notification enabled event. */
-    BLE_ESS_EVT_NOTIFICATION_DISABLED                                  /**< ESS value notification disabled event. */
+    BLE_ESS_EVT_NOTIFICATION_ENABLED,                       /**< ESS value notification enabled event. */
+    BLE_ESS_EVT_NOTIFICATION_DISABLED                       /**< ESS value notification disabled event. */
 } ble_ess_evt_type_t;
 
 /** @brief ESS event. */
 typedef struct
 {
-    ble_ess_evt_type_t evt_type;                                       /**< Type of event. */
+    ble_ess_evt_type_t evt_type;                            /**< Type of event. */
 } ble_ess_evt_t;
 
 // Forward declaration of the ble_ess_t type.
@@ -57,30 +57,22 @@ typedef struct ble_ess_s ble_ess_t;
 /** @brief ESS event handler type. */
 typedef void (*ble_ess_evt_handler_t) (ble_ess_t * p_cscs, ble_ess_evt_t * p_evt);
 
-/**@brief FLOAT format (IEEE-11073 32-bit FLOAT, defined as a 32-bit value with a 24-bit mantissa
- *        and an 8-bit exponent. */
-typedef struct
-{
-  int8_t  exponent;                                                         /**< Base 10 exponent */
-  int32_t mantissa;                                                         /**< Mantissa, should be using only 24 bits */
-} ieee_float32_t;
-
 /**@brief ESS init structure. This contains all options and data
 *         needed for initialization of the service. */
 typedef struct
 {
-    ble_ess_evt_handler_t       evt_handler;                           /**< Event handler to be called for handling events in the ESS. */
-    uint16_t                     feature;                               /**< Initial value for features of sensor @ref BLE_ESS_FEATURES. */
+    ble_ess_evt_handler_t       evt_handler;                /**< Event handler to be called for handling events in the ESS. */
+    uint16_t                    feature;                    /**< Initial value for features of sensor @ref BLE_ESS_FEATURES. */
 } ble_ess_init_t;
 
 typedef struct ble_ess_meas_s
 {
-    bool        is_temperature_data_present;                              /**< True if Temperature is present in the measurement. */
-    bool        is_humidity_data_present;                              /**< True if Humidity is present in the measurement. */
-    bool        is_pressure_data_present;                              /**< True if Humidity is present in the measurement. */
-    int16_t    temperature;                                  /**< Temperature in Celsius. */
-    uint16_t    humidity;                                  /**< Humidity in %. */
-    uint32_t    pressure;                                  /**< Pressure in hPa. */
+    bool        is_temperature_data_present;                /**< True if Temperature is present in the measurement. */
+    bool        is_humidity_data_present;                   /**< True if Humidity is present in the measurement. */
+    bool        is_pressure_data_present;                   /**< True if Pressure is present in the measurement. */
+    int16_t    temperature;                                 /**< Temperature in Celsius. */
+    uint16_t    humidity;                                   /**< Humidity in %. */
+    uint32_t    pressure;                                   /**< Pressure in hPa. */
 } ble_ess_meas_t;
 
 /**
@@ -88,14 +80,14 @@ typedef struct ble_ess_meas_s
  */
 struct ble_ess_s
 {
-    ble_ess_evt_handler_t        evt_handler;                               /**< Event handler to be called for handling events in the ESS. */
-    ble_srv_error_handler_t      error_handler;                             /**< Function to be called in case of an error. */
-    uint16_t                     service_handle;                            /**< Handle of ESS (as provided by the BLE stack). */
-    ble_gatts_char_handles_t     temperature_handles;                              /**< Handles related to the ESS temperature characteristic. */
-    ble_gatts_char_handles_t     humidity_handles;                              /**< Handles related to the ESS humidity characteristic. */
-    ble_gatts_char_handles_t     pressure_handles;                              /**< Handles related to the ESS pressure characteristic. */
-    uint16_t                     conn_handle;                               /**< Handle of the current connection (as provided by the BLE stack, is BLE_CONN_HANDLE_INVALID if not in a connection). */
-    uint16_t                     feature;                               /**< Bit mask of features available on sensor. */
+    ble_ess_evt_handler_t        evt_handler;               /**< Event handler to be called for handling events in the ESS. */
+    ble_srv_error_handler_t      error_handler;             /**< Function to be called in case of an error. */
+    uint16_t                     service_handle;            /**< Handle of ESS (as provided by the BLE stack). */
+    ble_gatts_char_handles_t     temperature_handles;       /**< Handles related to the ESS temperature characteristic. */
+    ble_gatts_char_handles_t     humidity_handles;          /**< Handles related to the ESS humidity characteristic. */
+    ble_gatts_char_handles_t     pressure_handles;          /**< Handles related to the ESS pressure characteristic. */
+    uint16_t                     conn_handle;               /**< Handle of the current connection (as provided by the BLE stack, is BLE_CONN_HANDLE_INVALID if not in a connection). */
+    uint16_t                     feature;                   /**< Bit mask of features available on sensor. */
 };
 
 // Forward declaration of the ble_ess_t type.

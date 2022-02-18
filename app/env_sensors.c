@@ -292,7 +292,7 @@ env_sens_stat_t env_sensors_deinit(void)
     nrf_gpio_cfg_default(ENV_SENS_PWR_PIN);
 
     /* Disable pull-up resistors on TWI */
-    nrf_gpio_pin_clear(ENV_SENS_PUP_PIN);
+    nrf_gpio_cfg_default(ENV_SENS_PUP_PIN);
 
     return ENV_SENS_OK;
 }

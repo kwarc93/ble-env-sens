@@ -92,6 +92,46 @@ static void on_write(ble_ess_t * p_ess, ble_evt_t const * p_ble_evt)
     }
 }
 
+static ret_code_t notify(uint16_t conn_handle, uint16_t value_handle, uint8_t *p_value, uint16_t len)
+{
+    uint16_t               hvx_len = len;
+    ble_gatts_hvx_params_t hvx_params = {0};
+    ret_code_t             err_code = NRF_SUCCESS;
+
+    hvx_params.handle = value_handle;
+    hvx_params.type   = BLE_GATT_HVX_NOTIFICATION;
+    hvx_params.offset = 0;
+    hvx_params.p_len  = &hvx_len;
+    hvx_params.p_data = p_value;
+
+    err_code = sd_ble_gatts_hvx(conn_handle, &hvx_params);
+    if ((err_code == NRF_SUCCESS) && (hvx_len != len))
+    {
+        err_code = NRF_ERROR_DATA_SIZE;
+        return err_code;
+    }
+
+    return err_code;
+}
+
+static ret_code_t update(uint16_t conn_handle, uint16_t value_handle, uint8_t *p_value, uint16_t len)
+{
+    ble_gatts_value_t      gatts_value = {0};
+    ret_code_t             err_code = NRF_SUCCESS;
+
+    gatts_value.len     = len;
+    gatts_value.offset  = 0;
+    gatts_value.p_value = p_value;
+
+    err_code = sd_ble_gatts_value_set(conn_handle, value_handle, &gatts_value);
+    if (err_code != NRF_SUCCESS)
+    {
+        return err_code;
+    }
+
+    return err_code;
+}
+
 uint32_t ble_ess_init(ble_ess_t * p_ess, const ble_ess_init_t * p_ess_init)
 {
     VERIFY_PARAM_NOT_NULL(p_ess);
@@ -221,10 +261,6 @@ void ble_ess_on_ble_evt(ble_evt_t const * p_ble_evt, void * p_context)
             on_write(p_ess, p_ble_evt);
             break;
 
-//        case BLE_GATTS_EVT_RW_AUTHORIZE_REQUEST:
-//            on_read_rsp(p_ess, p_ble_evt);
-//            break;
-
         default:
             // No implementation needed.
             break;
@@ -243,29 +279,16 @@ uint32_t ble_ess_measurement_send(ble_ess_t * p_ess, ble_ess_meas_t * p_measurem
     // Send value if connected and notifying
     if (p_ess->conn_handle != BLE_CONN_HANDLE_INVALID)
     {
-        uint8_t                encoded_meas[MAX_ESS_LEN];
-        uint16_t               len;
-        uint16_t               hvx_len;
-        ble_gatts_hvx_params_t hvx_params;
+        uint8_t encoded_meas[MAX_ESS_LEN];
+        uint16_t len = 0;
 
         if ((p_ess->feature & BLE_ESS_FEATURE_TEMPERATURE_BIT) && p_measurement->is_temperature_data_present)
         {
             // Send temperature measurement characteristic
-            len     = uint16_encode(p_measurement->temperature, encoded_meas);
-            hvx_len = len;
-
-            memset(&hvx_params, 0, sizeof(hvx_params));
-
-            hvx_params.handle = p_ess->temperature_handles.value_handle;
-            hvx_params.type   = BLE_GATT_HVX_NOTIFICATION;
-            hvx_params.offset = 0;
-            hvx_params.p_len  = &hvx_len;
-            hvx_params.p_data = encoded_meas;
-
-            err_code = sd_ble_gatts_hvx(p_ess->conn_handle, &hvx_params);
-            if ((err_code == NRF_SUCCESS) && (hvx_len != len))
+            len = uint16_encode(p_measurement->temperature, encoded_meas);
+            err_code = notify(p_ess->conn_handle, p_ess->temperature_handles.value_handle, encoded_meas, len);
+            if (err_code != NRF_SUCCESS)
             {
-                err_code = NRF_ERROR_DATA_SIZE;
                 return err_code;
             }
         }
@@ -273,21 +296,10 @@ uint32_t ble_ess_measurement_send(ble_ess_t * p_ess, ble_ess_meas_t * p_measurem
         if ((p_ess->feature & BLE_ESS_FEATURE_HUMIDITY_BIT) && p_measurement->is_humidity_data_present)
         {
             // Send humidity measurement characteristic
-            len     = uint16_encode(p_measurement->humidity, encoded_meas);
-            hvx_len = len;
-
-            memset(&hvx_params, 0, sizeof(hvx_params));
-
-            hvx_params.handle = p_ess->humidity_handles.value_handle;
-            hvx_params.type   = BLE_GATT_HVX_NOTIFICATION;
-            hvx_params.offset = 0;
-            hvx_params.p_len  = &hvx_len;
-            hvx_params.p_data = encoded_meas;
-
-            err_code = sd_ble_gatts_hvx(p_ess->conn_handle, &hvx_params);
-            if ((err_code == NRF_SUCCESS) && (hvx_len != len))
+            len = uint16_encode(p_measurement->humidity, encoded_meas);
+            err_code = notify(p_ess->conn_handle, p_ess->humidity_handles.value_handle, encoded_meas, len);
+            if (err_code != NRF_SUCCESS)
             {
-                err_code = NRF_ERROR_DATA_SIZE;
                 return err_code;
             }
         }
@@ -295,21 +307,10 @@ uint32_t ble_ess_measurement_send(ble_ess_t * p_ess, ble_ess_meas_t * p_measurem
         if ((p_ess->feature & BLE_ESS_FEATURE_PRESSURE_BIT) && p_measurement->is_pressure_data_present)
         {
             // Send pressure measurement characteristic
-            len     = uint32_encode(p_measurement->pressure, encoded_meas);
-            hvx_len = len;
-
-            memset(&hvx_params, 0, sizeof(hvx_params));
-
-            hvx_params.handle = p_ess->pressure_handles.value_handle;
-            hvx_params.type   = BLE_GATT_HVX_NOTIFICATION;
-            hvx_params.offset = 0;
-            hvx_params.p_len  = &hvx_len;
-            hvx_params.p_data = encoded_meas;
-
-            err_code = sd_ble_gatts_hvx(p_ess->conn_handle, &hvx_params);
-            if ((err_code == NRF_SUCCESS) && (hvx_len != len))
+            len = uint32_encode(p_measurement->pressure, encoded_meas);
+            err_code = notify(p_ess->conn_handle, p_ess->pressure_handles.value_handle, encoded_meas, len);
+            if (err_code != NRF_SUCCESS)
             {
-                err_code = NRF_ERROR_DATA_SIZE;
                 return err_code;
             }
         }
@@ -329,25 +330,16 @@ uint32_t ble_ess_measurement_update(ble_ess_t * p_ess, ble_ess_meas_t * p_measur
         return NRF_ERROR_NULL;
     }
 
-    uint32_t err_code = NRF_SUCCESS;
-
-    uint8_t                encoded_meas[MAX_ESS_LEN];
-    ble_gatts_value_t      gatts_value;
+    ret_code_t err_code = NRF_SUCCESS;
+    uint16_t len = 0;
+    uint8_t encoded_meas[MAX_ESS_LEN];
 
     if ((p_ess->feature & BLE_ESS_FEATURE_TEMPERATURE_BIT) && p_measurement->is_temperature_data_present)
     {
         // Update temperature measurement characteristic
 
-        // Initialize value struct.
-        memset(&gatts_value, 0, sizeof(gatts_value));
-
-        gatts_value.len     = uint16_encode(p_measurement->temperature, encoded_meas);
-        gatts_value.offset  = 0;
-        gatts_value.p_value = encoded_meas;
-
-        err_code = sd_ble_gatts_value_set(p_ess->conn_handle,
-                                          p_ess->temperature_handles.value_handle,
-                                          &gatts_value);
+        len = uint16_encode(p_measurement->temperature, encoded_meas);
+        err_code = update(p_ess->conn_handle, p_ess->temperature_handles.value_handle, encoded_meas, len);
         if (err_code != NRF_SUCCESS)
         {
             return err_code;
@@ -358,16 +350,8 @@ uint32_t ble_ess_measurement_update(ble_ess_t * p_ess, ble_ess_meas_t * p_measur
     {
         // Update humidity measurement characteristic
 
-        // Initialize value struct.
-        memset(&gatts_value, 0, sizeof(gatts_value));
-
-        gatts_value.len     = uint16_encode(p_measurement->humidity, encoded_meas);
-        gatts_value.offset  = 0;
-        gatts_value.p_value = encoded_meas;
-
-        err_code = sd_ble_gatts_value_set(p_ess->conn_handle,
-                                          p_ess->humidity_handles.value_handle,
-                                          &gatts_value);
+        len = uint16_encode(p_measurement->humidity, encoded_meas);
+        err_code = update(p_ess->conn_handle, p_ess->humidity_handles.value_handle, encoded_meas, len);
         if (err_code != NRF_SUCCESS)
         {
             return err_code;
@@ -378,16 +362,8 @@ uint32_t ble_ess_measurement_update(ble_ess_t * p_ess, ble_ess_meas_t * p_measur
     {
         // Update pressure measurement characteristic
 
-        // Initialize value struct.
-        memset(&gatts_value, 0, sizeof(gatts_value));
-
-        gatts_value.len     = uint32_encode(p_measurement->pressure, encoded_meas);
-        gatts_value.offset  = 0;
-        gatts_value.p_value = encoded_meas;
-
-        err_code = sd_ble_gatts_value_set(p_ess->conn_handle,
-                                          p_ess->pressure_handles.value_handle,
-                                          &gatts_value);
+        len = uint32_encode(p_measurement->pressure, encoded_meas);
+        err_code = update(p_ess->conn_handle, p_ess->pressure_handles.value_handle, encoded_meas, len);
         if (err_code != NRF_SUCCESS)
         {
             return err_code;

@@ -37,19 +37,6 @@
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-/** @file
- *
- * @defgroup ble_sdk_app_template_main main.c
- * @{
- * @ingroup ble_sdk_app_template
- * @brief Template project main file.
- *
- * This file contains a template for creating a new application. It has the code necessary to wakeup
- * from button, advertise, get a connection restart advertising on disconnect and if no new
- * connection created go back to system-off mode.
- * It can easily be used as a starting point for creating a new application, the comments identified
- * with 'YOUR_JOB' indicates where and how you can customize.
- */
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -96,7 +83,7 @@
 #define MANUFACTURER_NAME               "KWarc"                                 /**< Manufacturer. Will be passed to Device Information Service. */
 #define APP_ADV_INTERVAL                MSEC_TO_UNITS(1000, UNIT_0_625_MS)      /**< The advertising interval. */
 
-#define APP_USE_BSP                     0
+#define APP_USE_BSP                     0                                       /**< Use Board Support Package (enables LED's, Buttons, etc.) */
 #define APP_ADV_DURATION                0                                       /**< The advertising duration (180 seconds) in units of 10 milliseconds. */
 #define APP_BLE_OBSERVER_PRIO           3                                       /**< Application's BLE observer priority. You shouldn't need to modify this value. */
 #define APP_BLE_CONN_CFG_TAG            1                                       /**< A tag identifying the SoftDevice BLE configuration. */
@@ -124,26 +111,20 @@
 NRF_BLE_GATT_DEF(m_gatt);                                                       /**< GATT module instance. */
 NRF_BLE_QWR_DEF(m_qwr);                                                         /**< Context for the Queued Write module.*/
 BLE_ADVERTISING_DEF(m_advertising);                                             /**< Advertising module instance. */
-BLE_ESS_DEF(m_ess);
+BLE_ESS_DEF(m_ess);                                                             /**< Environmental Sensing Service (ESS) instance */
 
 static uint16_t m_conn_handle = BLE_CONN_HANDLE_INVALID;                        /**< Handle of the current connection. */
 
 static volatile bool client_connected = false;
+static volatile bool env_sensors_trigger = false;
 
 APP_TIMER_DEF(env_sensors_timer);
-
-static volatile bool env_sensors_trigger;
 
 void env_sensors_timer_cb(void * p_context)
 {
     env_sensors_trigger = true;
 }
 
-/* YOUR_JOB: Declare all services structure your application is using
- *  BLE_XYZ_DEF(m_xyz);
- */
-
-// YOUR_JOB: Use UUIDs for service(s) used in your application.
 static ble_uuid_t m_adv_uuids[] =                                               /**< Universally unique service identifiers. */
 {
     {BLE_UUID_DEVICE_INFORMATION_SERVICE, BLE_UUID_TYPE_BLE},
@@ -154,7 +135,8 @@ static ble_uuid_t m_adv_uuids[] =                                               
 static void advertising_start(bool erase_bonds);
 
 
-/**@brief Callback function for asserts in the SoftDevice.
+/**
+ * @brief Callback function for asserts in the SoftDevice.
  *
  * @details This function will be called in case of an assert in the SoftDevice.
  *
@@ -171,7 +153,8 @@ void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name)
 }
 
 
-/**@brief Function for handling Peer Manager events.
+/**
+ * @brief Function for handling Peer Manager events.
  *
  * @param[in] p_evt  Peer Manager event.
  */
@@ -193,7 +176,8 @@ static void pm_evt_handler(pm_evt_t const * p_evt)
 }
 
 
-/**@brief Function for the Timer initialization.
+/**
+ * @brief Function for the Timer initialization.
  *
  * @details Initializes the timer module. This creates and starts application timers.
  */
@@ -203,22 +187,15 @@ static void timers_init(void)
     ret_code_t err_code = app_timer_init();
     APP_ERROR_CHECK(err_code);
 
-    // Create timers.
-
-    /* YOUR_JOB: Create any timers to be used by the application.
-                 Below is an example of how to create a timer.
-                 For every new timer needed, increase the value of the macro APP_TIMER_MAX_TIMERS by
-                 one.
-       ret_code_t err_code;
-       err_code = app_timer_create(&m_app_timer_id, APP_TIMER_MODE_REPEATED, timer_timeout_handler);
-       APP_ERROR_CHECK(err_code); */
+    // Create timers
 
     err_code = app_timer_create(&env_sensors_timer, APP_TIMER_MODE_REPEATED, env_sensors_timer_cb);
     APP_ERROR_CHECK(err_code);
 }
 
 
-/**@brief Function for the GAP initialization.
+/**
+ * @brief Function for the GAP initialization.
  *
  * @details This function sets up all the necessary GAP (Generic Access Profile) parameters of the
  *          device including the device name, appearance, and the preferred connection parameters.
@@ -236,9 +213,8 @@ static void gap_params_init(void)
                                           strlen(DEVICE_NAME));
     APP_ERROR_CHECK(err_code);
 
-    /* YOUR_JOB: Use an appearance value matching the application's use case.
-       err_code = sd_ble_gap_appearance_set(BLE_APPEARANCE_);
-       APP_ERROR_CHECK(err_code); */
+    err_code = sd_ble_gap_appearance_set(BLE_APPEARANCE_GENERIC_THERMOMETER);
+    APP_ERROR_CHECK(err_code);
 
     memset(&gap_conn_params, 0, sizeof(gap_conn_params));
 
@@ -252,7 +228,8 @@ static void gap_params_init(void)
 }
 
 
-/**@brief Function for initializing the GATT module.
+/**
+ * @brief Function for initializing the GATT module.
  */
 static void gatt_init(void)
 {
@@ -261,7 +238,8 @@ static void gatt_init(void)
 }
 
 
-/**@brief Function for handling Queued Write Module errors.
+/**
+ * @brief Function for handling Queued Write Module errors.
  *
  * @details A pointer to this function will be passed to each service which may need to inform the
  *          application about an error.
@@ -274,13 +252,13 @@ static void nrf_qwr_error_handler(uint32_t nrf_error)
 }
 
 
-/**@brief Function for handling the YYY Service events.
- * YOUR_JOB implement a service handler function depending on the event the service you are using can generate
+/**
+ * @brief Function for handling the YYY Service events.
  *
- * @details This function will be called for all YY Service events which are passed to
+ * @details This function will be called for all ESS events which are passed to
  *          the application.
  *
- * @param[in]   p_yy_service   YY Service structure.
+ * @param[in]   p_ess          ESS structure.
  * @param[in]   p_evt          Event received from the YY Service.
  *
  */
@@ -299,7 +277,8 @@ static void on_ess_evt(ble_ess_t *p_ess, ble_ess_evt_t *p_evt)
     }
 }
 
-/**@brief Function for initializing services that will be used by the application.
+/**
+ * @brief Function for initializing services that will be used by the application.
  */
 static void services_init(void)
 {
@@ -312,28 +291,7 @@ static void services_init(void)
     err_code = nrf_ble_qwr_init(&m_qwr, &qwr_init);
     APP_ERROR_CHECK(err_code);
 
-    /* YOUR_JOB: Add code to initialize the services used by the application.
-       ble_xxs_init_t                     xxs_init;
-       ble_yys_init_t                     yys_init;
-
-       // Initialize XXX Service.
-       memset(&xxs_init, 0, sizeof(xxs_init));
-
-       xxs_init.evt_handler                = NULL;
-       xxs_init.is_xxx_notify_supported    = true;
-       xxs_init.ble_xx_initial_value.level = 100;
-
-       err_code = ble_bas_init(&m_xxs, &xxs_init);
-       APP_ERROR_CHECK(err_code);
-
-       // Initialize YYY Service.
-       memset(&yys_init, 0, sizeof(yys_init));
-       yys_init.evt_handler                  = on_yys_evt;
-       yys_init.ble_yy_initial_value.counter = 0;
-
-       err_code = ble_yy_service_init(&yys_init, &yy_init);
-       APP_ERROR_CHECK(err_code);
-     */
+    /* TODO: Add Battery Service */
 
     ble_ess_init_t ess_init;
     memset(&ess_init, 0, sizeof(ess_init));
@@ -348,7 +306,8 @@ static void services_init(void)
 }
 
 
-/**@brief Function for handling the Connection Parameters Module.
+/**
+ * @brief Function for handling the Connection Parameters Module.
  *
  * @details This function will be called for all events in the Connection Parameters Module which
  *          are passed to the application.
@@ -370,7 +329,8 @@ static void on_conn_params_evt(ble_conn_params_evt_t * p_evt)
 }
 
 
-/**@brief Function for handling a Connection Parameters error.
+/**
+ * @brief Function for handling a Connection Parameters error.
  *
  * @param[in] nrf_error  Error code containing information about what went wrong.
  */
@@ -380,7 +340,8 @@ static void conn_params_error_handler(uint32_t nrf_error)
 }
 
 
-/**@brief Function for initializing the Connection Parameters module.
+/**
+ * @brief Function for initializing the Connection Parameters module.
  */
 static void conn_params_init(void)
 {
@@ -403,18 +364,17 @@ static void conn_params_init(void)
 }
 
 
-/**@brief Function for starting timers.
+/**
+ * @brief Function for starting timers.
  */
 static void application_timers_start(void)
 {
-    /* YOUR_JOB: Start your timers. below is an example of how to start a timer.
-       ret_code_t err_code;
-       err_code = app_timer_start(m_app_timer_id, TIMER_INTERVAL, NULL);
-       APP_ERROR_CHECK(err_code); */
+
 }
 
 
-/**@brief Function for putting the chip into sleep mode.
+/**
+ * @brief Function for putting the chip into sleep mode.
  *
  * @note This function will not return.
  */
@@ -436,7 +396,8 @@ static void sleep_mode_enter(void)
 }
 
 
-/**@brief Function for handling advertising events.
+/**
+ * @brief Function for handling advertising events.
  *
  * @details This function will be called for advertising events which are passed to the application.
  *
@@ -466,7 +427,8 @@ static void on_adv_evt(ble_adv_evt_t ble_adv_evt)
 }
 
 
-/**@brief Function for handling BLE events.
+/**
+ * @brief Function for handling BLE events.
  *
  * @param[in]   p_ble_evt   Bluetooth stack event.
  * @param[in]   p_context   Unused.
@@ -530,7 +492,8 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context)
 }
 
 
-/**@brief Function for initializing the BLE stack.
+/**
+ * @brief Function for initializing the BLE stack.
  *
  * @details Initializes the SoftDevice and the BLE event interrupt.
  */
@@ -556,7 +519,8 @@ static void ble_stack_init(void)
 }
 
 
-/**@brief Function for the Peer Manager initialization.
+/**
+ * @brief Function for the Peer Manager initialization.
  */
 static void peer_manager_init(void)
 {
@@ -590,7 +554,8 @@ static void peer_manager_init(void)
 }
 
 
-/**@brief Clear bond information from persistent storage.
+/**
+ * @brief Clear bond information from persistent storage.
  */
 static void delete_bonds(void)
 {
@@ -602,8 +567,37 @@ static void delete_bonds(void)
     APP_ERROR_CHECK(err_code);
 }
 
+/**
+ * @brief Function for initializing the Advertising functionality.
+ */
+static void advertising_init(void)
+{
+    ret_code_t             err_code;
+    ble_advertising_init_t init;
+
+    memset(&init, 0, sizeof(init));
+
+    init.advdata.name_type               = BLE_ADVDATA_FULL_NAME;
+    init.advdata.include_appearance      = true;
+    init.advdata.flags                   = BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE;
+    init.advdata.uuids_complete.uuid_cnt = sizeof(m_adv_uuids) / sizeof(m_adv_uuids[0]);
+    init.advdata.uuids_complete.p_uuids  = m_adv_uuids;
+
+    init.config.ble_adv_fast_enabled  = true;
+    init.config.ble_adv_fast_interval = APP_ADV_INTERVAL;
+    init.config.ble_adv_fast_timeout  = APP_ADV_DURATION;
+
+    init.evt_handler = on_adv_evt;
+
+    err_code = ble_advertising_init(&m_advertising, &init);
+    APP_ERROR_CHECK(err_code);
+
+    ble_advertising_conn_cfg_tag_set(&m_advertising, APP_BLE_CONN_CFG_TAG);
+}
+
 #if APP_USE_BSP
-/**@brief Function for handling events from the BSP module.
+/**
+ * @brief Function for handling events from the BSP module.
  *
  * @param[in]   event   Event generated when button is pressed.
  */
@@ -641,41 +635,13 @@ static void bsp_event_handler(bsp_event_t event)
             break;
     }
 }
-#endif
 
-/**@brief Function for initializing the Advertising functionality.
- */
-static void advertising_init(void)
-{
-    ret_code_t             err_code;
-    ble_advertising_init_t init;
-
-    memset(&init, 0, sizeof(init));
-
-    init.advdata.name_type               = BLE_ADVDATA_FULL_NAME;
-    init.advdata.include_appearance      = true;
-    init.advdata.flags                   = BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE;
-    init.advdata.uuids_complete.uuid_cnt = sizeof(m_adv_uuids) / sizeof(m_adv_uuids[0]);
-    init.advdata.uuids_complete.p_uuids  = m_adv_uuids;
-
-    init.config.ble_adv_fast_enabled  = true;
-    init.config.ble_adv_fast_interval = APP_ADV_INTERVAL;
-    init.config.ble_adv_fast_timeout  = APP_ADV_DURATION;
-
-    init.evt_handler = on_adv_evt;
-
-    err_code = ble_advertising_init(&m_advertising, &init);
-    APP_ERROR_CHECK(err_code);
-
-    ble_advertising_conn_cfg_tag_set(&m_advertising, APP_BLE_CONN_CFG_TAG);
-}
-
-#if APP_USE_BSP
-/**@brief Function for initializing buttons and leds.
+/**
+ * @brief Function for initializing buttons and leds.
  *
  * @param[out] p_erase_bonds  Will be true if the clear bonding button was pressed to wake the application up.
  */
-static void buttons_leds_init(bool * p_erase_bonds)
+static void board_init(bool * p_erase_bonds)
 {
     ret_code_t err_code;
     bsp_event_t startup_event;
@@ -690,7 +656,8 @@ static void buttons_leds_init(bool * p_erase_bonds)
 }
 #endif
 
-/**@brief Function for initializing the nrf log module.
+/**
+ * @brief Function for initializing the nrf log module.
  */
 static void log_init(void)
 {
@@ -768,7 +735,7 @@ int main(void)
     log_init();
     timers_init();
 #if APP_USE_BSP
-    buttons_leds_init(&erase_bonds);
+    board_init(&erase_bonds);
 #endif
     power_management_init();
     ble_stack_init();
@@ -783,18 +750,18 @@ int main(void)
     APP_ERROR_CHECK(sd_power_dcdc_mode_set(NRF_POWER_DCDC_ENABLE));
 
     // Start execution.
-    NRF_LOG_INFO("Template example started.");
+    NRF_LOG_INFO("Application started.");
     application_timers_start();
     advertising_start(erase_bonds);
 
-    bool client_connected_prev_state = client_connected;
+    bool client_was_connected = client_connected;
 
     // Enter main loop.
     for (;;)
     {
-        if (client_connected != client_connected_prev_state)
+        if (client_connected != client_was_connected)
         {
-            client_connected_prev_state = client_connected;
+            client_was_connected = client_connected;
 
             if (client_connected)
             {
