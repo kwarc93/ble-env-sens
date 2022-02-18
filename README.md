@@ -1,10 +1,12 @@
-# Bluetooth LE thermometer & higrometer
+# Bluetooth LE Environmental sensor
 
-BLE thermometer & higrometer running on 'Arduino Nano 33 BLE Sense board' (ABX00031)
+BLE sensor (thermometer, hygrometer, pressure) running on 'Arduino Nano 33 BLE Sense board' (ABX00031)
 
 ## Features:
 
-todo
+ - Temperature measurement
+ - Relative Humidity measurement
+ - Barometric pressure measurement
 
 ## Overview
 
