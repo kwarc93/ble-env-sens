@@ -117,7 +117,7 @@ void ble_ess_on_ble_evt(ble_evt_t const * p_ble_evt, void * p_context);
 
 
 /**
- * @brief Function for sending ESS measurements if notification has been enabled.
+ * @brief Function for updating the ESS measurements.
  *
  * @details The application calls this function after having performed a ESS measurement.
  *          If notification has been enabled, the measurement data is encoded
@@ -125,23 +125,10 @@ void ble_ess_on_ble_evt(ble_evt_t const * p_ble_evt, void * p_context);
  *
  * @param[in]   p_cscs         ESS structure.
  * @param[in]   p_measurement  Pointer to new ess measurement.
+ * @param[in]   conn_handle    Connection handle.
  *
  * @return      NRF_SUCCESS on success, otherwise an error code.
  */
-uint32_t ble_ess_measurement_send(ble_ess_t * p_cscs, ble_ess_meas_t * p_measurement);
-
-/**
- * @brief Function for updating ESS measurements.
- *
- * @details The application calls this function after having performed a ESS measurement.
- *          If notification has been enabled, the measurement data is encoded
- *          and sent to the client.
- *
- * @param[in]   p_cscs         ESS structure.
- * @param[in]   p_measurement  Pointer to new ess measurement.
- *
- * @return      NRF_SUCCESS on success, otherwise an error code.
- */
-uint32_t ble_ess_measurement_update(ble_ess_t * p_ess, ble_ess_meas_t * p_measurement);
+uint32_t ble_ess_measurement_update(ble_ess_t * p_cscs, ble_ess_meas_t * p_measurement, uint16_t conn_handle);
 
 #endif /* APP_BLE_ESS_H_ */

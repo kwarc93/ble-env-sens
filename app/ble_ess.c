@@ -7,6 +7,7 @@
 
 #include "sdk_common.h"
 #include "ble_srv_common.h"
+#include "ble_conn_state.h"
 #include "ble_ess.h"
 
 #include <string.h>
@@ -94,9 +95,9 @@ static void on_write(ble_ess_t * p_ess, ble_evt_t const * p_ble_evt)
 
 static ret_code_t notify(uint16_t conn_handle, uint16_t value_handle, uint8_t *p_value, uint16_t len)
 {
-    uint16_t               hvx_len = len;
-    ble_gatts_hvx_params_t hvx_params = {0};
-    ret_code_t             err_code = NRF_SUCCESS;
+    uint16_t hvx_len = len;
+    ble_gatts_hvx_params_t hvx_params = { 0 };
+    ret_code_t err_code = NRF_SUCCESS;
 
     hvx_params.handle = value_handle;
     hvx_params.type   = BLE_GATT_HVX_NOTIFICATION;
@@ -104,11 +105,30 @@ static ret_code_t notify(uint16_t conn_handle, uint16_t value_handle, uint8_t *p
     hvx_params.p_len  = &hvx_len;
     hvx_params.p_data = p_value;
 
-    err_code = sd_ble_gatts_hvx(conn_handle, &hvx_params);
-    if ((err_code == NRF_SUCCESS) && (hvx_len != len))
+    if (conn_handle == BLE_CONN_HANDLE_ALL)
     {
-        err_code = NRF_ERROR_DATA_SIZE;
-        return err_code;
+        ble_conn_state_conn_handle_list_t conn_handles = ble_conn_state_conn_handles();
+
+        // Try sending notifications to all valid connection handles.
+        for (uint32_t i = 0; i < conn_handles.len; i++)
+        {
+            if (ble_conn_state_status(conn_handles.conn_handles[i]) == BLE_CONN_STATUS_CONNECTED)
+            {
+                if (err_code == NRF_SUCCESS)
+                {
+                    err_code = sd_ble_gatts_hvx(conn_handle, &hvx_params);
+                }
+                else
+                {
+                    // Preserve the first non-zero error code
+                    UNUSED_RETURN_VALUE(sd_ble_gatts_hvx(conn_handle, &hvx_params));
+                }
+            }
+        }
+    }
+    else
+    {
+        err_code = sd_ble_gatts_hvx(conn_handle, &hvx_params);
     }
 
     return err_code;
@@ -267,63 +287,7 @@ void ble_ess_on_ble_evt(ble_evt_t const * p_ble_evt, void * p_context)
     }
 }
 
-uint32_t ble_ess_measurement_send(ble_ess_t * p_ess, ble_ess_meas_t * p_measurement)
-{
-    if (p_ess == NULL || p_measurement == NULL)
-    {
-        return NRF_ERROR_NULL;
-    }
-
-    uint32_t err_code = NRF_SUCCESS;
-
-    // Send value if connected and notifying
-    if (p_ess->conn_handle != BLE_CONN_HANDLE_INVALID)
-    {
-        uint8_t encoded_meas[MAX_ESS_LEN];
-        uint16_t len = 0;
-
-        if ((p_ess->feature & BLE_ESS_FEATURE_TEMPERATURE_BIT) && p_measurement->is_temperature_data_present)
-        {
-            // Send temperature measurement characteristic
-            len = uint16_encode(p_measurement->temperature, encoded_meas);
-            err_code = notify(p_ess->conn_handle, p_ess->temperature_handles.value_handle, encoded_meas, len);
-            if (err_code != NRF_SUCCESS)
-            {
-                return err_code;
-            }
-        }
-
-        if ((p_ess->feature & BLE_ESS_FEATURE_HUMIDITY_BIT) && p_measurement->is_humidity_data_present)
-        {
-            // Send humidity measurement characteristic
-            len = uint16_encode(p_measurement->humidity, encoded_meas);
-            err_code = notify(p_ess->conn_handle, p_ess->humidity_handles.value_handle, encoded_meas, len);
-            if (err_code != NRF_SUCCESS)
-            {
-                return err_code;
-            }
-        }
-
-        if ((p_ess->feature & BLE_ESS_FEATURE_PRESSURE_BIT) && p_measurement->is_pressure_data_present)
-        {
-            // Send pressure measurement characteristic
-            len = uint32_encode(p_measurement->pressure, encoded_meas);
-            err_code = notify(p_ess->conn_handle, p_ess->pressure_handles.value_handle, encoded_meas, len);
-            if (err_code != NRF_SUCCESS)
-            {
-                return err_code;
-            }
-        }
-    }
-    else
-    {
-        err_code = NRF_ERROR_INVALID_STATE;
-    }
-
-    return err_code;
-}
-
-uint32_t ble_ess_measurement_update(ble_ess_t * p_ess, ble_ess_meas_t * p_measurement)
+uint32_t ble_ess_measurement_update(ble_ess_t * p_ess, ble_ess_meas_t * p_measurement, uint16_t conn_handle)
 {
     if (p_ess == NULL || p_measurement == NULL)
     {
@@ -331,42 +295,69 @@ uint32_t ble_ess_measurement_update(ble_ess_t * p_ess, ble_ess_meas_t * p_measur
     }
 
     ret_code_t err_code = NRF_SUCCESS;
-    uint16_t len = 0;
     uint8_t encoded_meas[MAX_ESS_LEN];
+    uint16_t len = 0;
 
     if ((p_ess->feature & BLE_ESS_FEATURE_TEMPERATURE_BIT) && p_measurement->is_temperature_data_present)
     {
-        // Update temperature measurement characteristic
-
+        // Update temperature measurement characteristic database
         len = uint16_encode(p_measurement->temperature, encoded_meas);
-        err_code = update(p_ess->conn_handle, p_ess->temperature_handles.value_handle, encoded_meas, len);
+        err_code = update(BLE_CONN_HANDLE_INVALID, p_ess->temperature_handles.value_handle, encoded_meas, len);
         if (err_code != NRF_SUCCESS)
         {
             return err_code;
+        }
+
+        // Send notification
+        if (conn_handle != BLE_CONN_HANDLE_INVALID)
+        {
+            err_code = notify(conn_handle, p_ess->temperature_handles.value_handle, encoded_meas, len);
+            if (err_code != NRF_SUCCESS)
+            {
+                return err_code;
+            }
         }
     }
 
     if ((p_ess->feature & BLE_ESS_FEATURE_HUMIDITY_BIT) && p_measurement->is_humidity_data_present)
     {
-        // Update humidity measurement characteristic
-
+        // Update humidity measurement characteristic database
         len = uint16_encode(p_measurement->humidity, encoded_meas);
-        err_code = update(p_ess->conn_handle, p_ess->humidity_handles.value_handle, encoded_meas, len);
+        err_code = update(BLE_CONN_HANDLE_INVALID, p_ess->humidity_handles.value_handle, encoded_meas, len);
         if (err_code != NRF_SUCCESS)
         {
             return err_code;
+        }
+
+        // Send notification
+        if (conn_handle != BLE_CONN_HANDLE_INVALID)
+        {
+            err_code = notify(conn_handle, p_ess->humidity_handles.value_handle, encoded_meas, len);
+            if (err_code != NRF_SUCCESS)
+            {
+                return err_code;
+            }
         }
     }
 
     if ((p_ess->feature & BLE_ESS_FEATURE_PRESSURE_BIT) && p_measurement->is_pressure_data_present)
     {
-        // Update pressure measurement characteristic
-
+        // Update pressure measurement characteristic database
         len = uint32_encode(p_measurement->pressure, encoded_meas);
-        err_code = update(p_ess->conn_handle, p_ess->pressure_handles.value_handle, encoded_meas, len);
+        err_code = update(BLE_CONN_HANDLE_INVALID, p_ess->pressure_handles.value_handle, encoded_meas, len);
         if (err_code != NRF_SUCCESS)
         {
             return err_code;
+        }
+
+        // Send notification
+        if (conn_handle != BLE_CONN_HANDLE_INVALID)
+        {
+            err_code = notify(conn_handle, p_ess->pressure_handles.value_handle, encoded_meas, len);
+            if (err_code != NRF_SUCCESS)
+            {
+                return err_code;
+            }
         }
     }
 

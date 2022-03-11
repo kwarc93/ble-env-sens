@@ -75,12 +75,16 @@
 
 #include "nrf_delay.h"
 #include "nrf_gpio.h"
+#include "nrf_drv_saadc.h"
 
 #include "env_sensors.h"
 
-
 #define DEVICE_NAME                     "ENV-SENS"                              /**< Name of device. Will be included in the advertising data. */
 #define MANUFACTURER_NAME               "KWarc"                                 /**< Manufacturer. Will be passed to Device Information Service. */
+#define MODEL_NUM                       "1.0"                                   /**< Model number. Will be passed to Device Information Service. */
+#define MANUFACTURER_ID                 0x1122334455                            /**< Manufacturer ID, part of System ID. Will be passed to Device Information Service. */
+#define ORG_UNIQUE_ID                   0xDEADFACE                              /**< Organizational Unique ID, part of System ID. Will be passed to Device Information Service. */
+
 #define APP_ADV_INTERVAL                MSEC_TO_UNITS(1000, UNIT_0_625_MS)      /**< The advertising interval. */
 
 #define APP_USE_BSP                     0                                       /**< Use Board Support Package (enables LED's, Buttons, etc.) */
@@ -106,19 +110,38 @@
 #define SEC_PARAM_MIN_KEY_SIZE          7                                       /**< Minimum encryption key size. */
 #define SEC_PARAM_MAX_KEY_SIZE          16                                      /**< Maximum encryption key size. */
 
+#define ADC_REF_VOLTAGE_IN_MILLIVOLTS   600                                     /**< Reference voltage (in milli volts) used by ADC while doing conversion. */
+#define ADC_PRE_SCALING_COMPENSATION    6                                       /**< The ADC is configured to use VDD with 1/3 prescaling as input. And hence the result of conversion is to be multiplied by 3 to get the actual value of the battery voltage.*/
+#define DIODE_FWD_VOLT_DROP_MILLIVOLTS  270                                     /**< Typical forward voltage drop of the diode . */
+#define ADC_RES_10BIT                   1023                                    /**< Maximum digital value for 10-bit ADC conversion. */
+
+/**
+ * @brief Macro to convert the result of ADC conversion in millivolts.
+ *
+ * @param[in]  ADC_VALUE   ADC result.
+ *
+ * @retval     Result converted to millivolts.
+ */
+#define ADC_RESULT_IN_MILLI_VOLTS(ADC_VALUE)\
+        ((((ADC_VALUE) * ADC_REF_VOLTAGE_IN_MILLIVOLTS) / ADC_RES_10BIT) * ADC_PRE_SCALING_COMPENSATION)
+
 #define DEAD_BEEF                       0xDEADBEEF                              /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
+
 
 NRF_BLE_GATT_DEF(m_gatt);                                                       /**< GATT module instance. */
 NRF_BLE_QWR_DEF(m_qwr);                                                         /**< Context for the Queued Write module.*/
 BLE_ADVERTISING_DEF(m_advertising);                                             /**< Advertising module instance. */
 BLE_ESS_DEF(m_ess);                                                             /**< Environmental Sensing Service (ESS) instance */
+BLE_BAS_DEF(m_bas);                                                             /**< Structure used to identify the battery service. */
+
+APP_TIMER_DEF(env_sensors_timer);                                               /**< Sensors timer. */
+APP_TIMER_DEF(battery_timer);                                                   /**< Battery timer. */
 
 static uint16_t m_conn_handle = BLE_CONN_HANDLE_INVALID;                        /**< Handle of the current connection. */
 
 static volatile bool client_connected = false;
 static volatile bool env_sensors_trigger = false;
 
-APP_TIMER_DEF(env_sensors_timer);
 
 void env_sensors_timer_cb(void * p_context)
 {
@@ -128,6 +151,7 @@ void env_sensors_timer_cb(void * p_context)
 static ble_uuid_t m_adv_uuids[] =                                               /**< Universally unique service identifiers. */
 {
     {BLE_UUID_DEVICE_INFORMATION_SERVICE, BLE_UUID_TYPE_BLE},
+    {BLE_UUID_BATTERY_SERVICE, BLE_UUID_TYPE_BLE},
     {BLE_UUID_ENVIRONMENTAL_SENSING_SERVICE, BLE_UUID_TYPE_BLE},
 };
 
@@ -175,6 +199,86 @@ static void pm_evt_handler(pm_evt_t const * p_evt)
     }
 }
 
+/**
+ * @brief Function for handling the ADC interrupt.
+ *
+ * @details  This function will fetch the conversion result from the ADC, convert the value into
+ *           percentage and send it to peer.
+ */
+void saadc_event_handler(nrf_drv_saadc_evt_t const * p_event)
+{
+    if (p_event->type == NRF_DRV_SAADC_EVT_DONE)
+    {
+        nrf_saadc_value_t adc_result;
+        uint16_t batt_lvl_mv;
+        uint8_t percentage_batt_lvl;
+        ret_code_t err_code;
+
+        adc_result = p_event->data.done.p_buffer[0];
+
+        err_code = nrf_drv_saadc_buffer_convert(p_event->data.done.p_buffer, 1);
+        APP_ERROR_CHECK(err_code);
+
+        batt_lvl_mv = ADC_RESULT_IN_MILLI_VOLTS(adc_result);
+        NRF_LOG_INFO("Battery: %u mV", batt_lvl_mv);
+        percentage_batt_lvl = battery_level_in_percent(batt_lvl_mv);
+
+        err_code = ble_bas_battery_level_update(&m_bas, percentage_batt_lvl, BLE_CONN_HANDLE_ALL);
+        if ((err_code != NRF_SUCCESS) && (err_code != NRF_ERROR_INVALID_STATE) &&
+            (err_code != NRF_ERROR_RESOURCES) && (err_code != NRF_ERROR_BUSY) &&
+            (err_code != BLE_ERROR_GATTS_SYS_ATTR_MISSING))
+        {
+            APP_ERROR_HANDLER(err_code);
+        }
+    }
+}
+
+/**
+ * @brief Function for handling the Battery measurement timer timeout.
+ *
+ * @details This function will be called each time the battery level measurement timer expires.
+ *
+ * @param[in] p_context   Pointer used for passing some arbitrary information (context) from the
+ *                        app_start_timer() call to the timeout handler.
+ */
+static void battery_level_timer_cb(void * p_context)
+{
+    UNUSED_PARAMETER(p_context);
+
+    ret_code_t err_code;
+    err_code = nrf_drv_saadc_sample();
+    APP_ERROR_CHECK(err_code);
+}
+
+
+/**
+ * @brief Function for initializing ADC to do battery level conversion.
+ */
+static void adc_init(void)
+{
+    static nrf_saadc_value_t adc_buf[2];
+
+    ret_code_t err_code = nrf_drv_saadc_init(NULL, saadc_event_handler);
+    APP_ERROR_CHECK(err_code);
+
+    nrf_saadc_channel_config_t config = NRF_DRV_SAADC_DEFAULT_CHANNEL_CONFIG_SE(NRF_SAADC_INPUT_VDD);
+    err_code = nrf_drv_saadc_channel_init(0, &config);
+    APP_ERROR_CHECK(err_code);
+
+    err_code = nrf_drv_saadc_buffer_convert(&adc_buf[0], 1);
+    APP_ERROR_CHECK(err_code);
+
+    err_code = nrf_drv_saadc_buffer_convert(&adc_buf[1], 1);
+    APP_ERROR_CHECK(err_code);
+}
+
+/**
+ * @brief Function for disabling ADC used to do battery level conversion.
+ */
+//static void adc_deinit(void)
+//{
+//    nrf_drv_saadc_uninit();
+//}
 
 /**
  * @brief Function for the Timer initialization.
@@ -188,7 +292,8 @@ static void timers_init(void)
     APP_ERROR_CHECK(err_code);
 
     // Create timers
-
+    err_code = app_timer_create(&battery_timer, APP_TIMER_MODE_REPEATED, battery_level_timer_cb);
+    APP_ERROR_CHECK(err_code);
     err_code = app_timer_create(&env_sensors_timer, APP_TIMER_MODE_REPEATED, env_sensors_timer_cb);
     APP_ERROR_CHECK(err_code);
 }
@@ -208,9 +313,7 @@ static void gap_params_init(void)
 
     BLE_GAP_CONN_SEC_MODE_SET_OPEN(&sec_mode);
 
-    err_code = sd_ble_gap_device_name_set(&sec_mode,
-                                          (const uint8_t *)DEVICE_NAME,
-                                          strlen(DEVICE_NAME));
+    err_code = sd_ble_gap_device_name_set(&sec_mode, (const uint8_t *)DEVICE_NAME, strlen(DEVICE_NAME));
     APP_ERROR_CHECK(err_code);
 
     err_code = sd_ble_gap_appearance_set(BLE_APPEARANCE_GENERIC_THERMOMETER);
@@ -291,8 +394,40 @@ static void services_init(void)
     err_code = nrf_ble_qwr_init(&m_qwr, &qwr_init);
     APP_ERROR_CHECK(err_code);
 
-    /* TODO: Add Battery Service */
+    // Initialize Battery Service.
+    ble_bas_init_t bas_init;
+    memset(&bas_init, 0, sizeof(bas_init));
 
+    bas_init.bl_rd_sec = SEC_OPEN;
+    bas_init.bl_cccd_wr_sec = SEC_OPEN;
+    bas_init.bl_report_rd_sec = SEC_OPEN;
+
+    bas_init.evt_handler = NULL;
+    bas_init.support_notification = true;
+    bas_init.p_report_ref = NULL;
+    bas_init.initial_batt_level = 100;
+
+    err_code = ble_bas_init (&m_bas, &bas_init);
+    APP_ERROR_CHECK(err_code);
+
+    // Initialize Device Information Service.
+    ble_dis_init_t dis_init;
+    memset(&dis_init, 0, sizeof(dis_init));
+
+    ble_srv_ascii_to_utf8(&dis_init.manufact_name_str, MANUFACTURER_NAME);
+    ble_srv_ascii_to_utf8(&dis_init.model_num_str, MODEL_NUM);
+
+    ble_dis_sys_id_t sys_id;
+    sys_id.manufacturer_id = MANUFACTURER_ID;
+    sys_id.organizationally_unique_id = ORG_UNIQUE_ID;
+    dis_init.p_sys_id = &sys_id;
+
+    dis_init.dis_char_rd_sec = SEC_OPEN;
+
+    err_code = ble_dis_init(&dis_init);
+    APP_ERROR_CHECK(err_code);
+
+    // Initialize Environmental Sensing Service
     ble_ess_init_t ess_init;
     memset(&ess_init, 0, sizeof(ess_init));
 
@@ -369,7 +504,9 @@ static void conn_params_init(void)
  */
 static void application_timers_start(void)
 {
-
+    ret_code_t err_code;
+    err_code = app_timer_start(battery_timer, APP_TIMER_TICKS(10 * 1000), NULL);
+    APP_ERROR_CHECK(err_code);
 }
 
 
@@ -710,9 +847,9 @@ static void advertising_start(bool erase_bonds)
 
 static void env_sensors_drdy_cb(const env_sens_data_t *data)
 {
-    NRF_LOG_RAW_INFO("[ENV SENS] T: " NRF_LOG_FLOAT_MARKER "°C\n", NRF_LOG_FLOAT(data->temperature));
-    NRF_LOG_RAW_INFO("[ENV SENS] RH: " NRF_LOG_FLOAT_MARKER "%%\n", NRF_LOG_FLOAT(data->humidity));
-    NRF_LOG_RAW_INFO("[ENV SENS] P: " NRF_LOG_FLOAT_MARKER "hPa\n", NRF_LOG_FLOAT(data->pressure));
+    NRF_LOG_RAW_INFO("<info> app: Temperature: " NRF_LOG_FLOAT_MARKER "°C\n", NRF_LOG_FLOAT(data->temperature));
+    NRF_LOG_RAW_INFO("<info> app: Humidity: " NRF_LOG_FLOAT_MARKER "%%\n", NRF_LOG_FLOAT(data->humidity));
+    NRF_LOG_RAW_INFO("<info> app: Pressure: " NRF_LOG_FLOAT_MARKER "hPa\n", NRF_LOG_FLOAT(data->pressure));
 
     ble_ess_meas_t ess_meas = {0};
     ess_meas.is_temperature_data_present = true;
@@ -722,7 +859,7 @@ static void env_sensors_drdy_cb(const env_sens_data_t *data)
     ess_meas.is_pressure_data_present = true;
     ess_meas.pressure = lroundf(data->pressure * 1000.0f);
 
-    ble_ess_measurement_send(&m_ess, &ess_meas);
+    ble_ess_measurement_update(&m_ess, &ess_meas, m_ess.conn_handle);
 }
 
 /**@brief Function for application main entry.
@@ -734,6 +871,7 @@ int main(void)
     // Initialize.
     log_init();
     timers_init();
+    adc_init();
 #if APP_USE_BSP
     board_init(&erase_bonds);
 #endif
