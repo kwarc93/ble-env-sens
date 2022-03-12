@@ -7,10 +7,11 @@ BLE sensor (thermometer, hygrometer, pressure) running on 'Arduino Nano 33 BLE S
  - Temperature measurement
  - Relative Humidity measurement
  - Barometric pressure measurement
+ - Low power consumption: ~8uA at advertising, ~16uA at connection
 
 ## Overview
 
-todo
+Low power Bluetooth Low Energy sensor.
 
 ## Dependencies
 
