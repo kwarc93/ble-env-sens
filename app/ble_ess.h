@@ -41,8 +41,8 @@ NRF_SDH_BLE_OBSERVER(_name ## _obs,             \
 /** @brief ESS event type. */
 typedef enum
 {
-    BLE_ESS_EVT_NOTIFICATION_ENABLED,                       /**< ESS value notification enabled event. */
-    BLE_ESS_EVT_NOTIFICATION_DISABLED                       /**< ESS value notification disabled event. */
+    BLE_ESS_EVT_NOTIF_ENABLED,                                   /**< ESS value notification enabled event. */
+    BLE_ESS_EVT_NOTIF_DISABLED                                   /**< ESS value notification disabled event. */
 } ble_ess_evt_type_t;
 
 /** @brief ESS event. */
@@ -70,7 +70,7 @@ typedef struct ble_ess_meas_s
     bool        is_temperature_data_present;                /**< True if Temperature is present in the measurement. */
     bool        is_humidity_data_present;                   /**< True if Humidity is present in the measurement. */
     bool        is_pressure_data_present;                   /**< True if Pressure is present in the measurement. */
-    int16_t    temperature;                                 /**< Temperature in Celsius. */
+    int16_t     temperature;                                /**< Temperature in Celsius. */
     uint16_t    humidity;                                   /**< Humidity in %. */
     uint32_t    pressure;                                   /**< Pressure in hPa. */
 } ble_ess_meas_t;
@@ -88,6 +88,9 @@ struct ble_ess_s
     ble_gatts_char_handles_t     pressure_handles;          /**< Handles related to the ESS pressure characteristic. */
     uint16_t                     conn_handle;               /**< Handle of the current connection (as provided by the BLE stack, is BLE_CONN_HANDLE_INVALID if not in a connection). */
     uint16_t                     feature;                   /**< Bit mask of features available on sensor. */
+    bool temperature_notif_enabled;                         /**< Notifications enabled flag */
+    bool humidity_notif_enabled;                            /**< Notifications enabled flag */
+    bool pressure_notif_enabled;                            /**< Notifications enabled flag */
 };
 
 // Forward declaration of the ble_ess_t type.

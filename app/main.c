@@ -142,7 +142,6 @@ static uint16_t m_conn_handle = BLE_CONN_HANDLE_INVALID;                        
 static volatile bool client_connected = false;
 static volatile bool env_sensors_trigger = false;
 
-
 void env_sensors_timer_cb(void * p_context)
 {
     env_sensors_trigger = true;
@@ -219,6 +218,9 @@ void saadc_event_handler(nrf_drv_saadc_evt_t const * p_event)
         err_code = nrf_drv_saadc_buffer_convert(p_event->data.done.p_buffer, 1);
         APP_ERROR_CHECK(err_code);
 
+        // Disable ADC
+        nrf_drv_saadc_uninit();
+
         batt_lvl_mv = ADC_RESULT_IN_MILLI_VOLTS(adc_result);
         NRF_LOG_INFO("Battery: %u mV", batt_lvl_mv);
         percentage_batt_lvl = battery_level_in_percent(batt_lvl_mv);
@@ -245,20 +247,12 @@ static void battery_level_timer_cb(void * p_context)
 {
     UNUSED_PARAMETER(p_context);
 
-    ret_code_t err_code;
-    err_code = nrf_drv_saadc_sample();
-    APP_ERROR_CHECK(err_code);
-}
-
-
-/**
- * @brief Function for initializing ADC to do battery level conversion.
- */
-static void adc_init(void)
-{
     static nrf_saadc_value_t adc_buf[2];
 
-    ret_code_t err_code = nrf_drv_saadc_init(NULL, saadc_event_handler);
+    // Initialize ADC
+    ret_code_t err_code;
+
+    err_code = nrf_drv_saadc_init(NULL, saadc_event_handler);
     APP_ERROR_CHECK(err_code);
 
     nrf_saadc_channel_config_t config = NRF_DRV_SAADC_DEFAULT_CHANNEL_CONFIG_SE(NRF_SAADC_INPUT_VDD);
@@ -270,15 +264,12 @@ static void adc_init(void)
 
     err_code = nrf_drv_saadc_buffer_convert(&adc_buf[1], 1);
     APP_ERROR_CHECK(err_code);
+
+    // Trigger ADC
+    err_code = nrf_drv_saadc_sample();
+    APP_ERROR_CHECK(err_code);
 }
 
-/**
- * @brief Function for disabling ADC used to do battery level conversion.
- */
-//static void adc_deinit(void)
-//{
-//    nrf_drv_saadc_uninit();
-//}
 
 /**
  * @brief Function for the Timer initialization.
@@ -369,9 +360,9 @@ static void on_ess_evt(ble_ess_t *p_ess, ble_ess_evt_t *p_evt)
 {
     switch (p_evt->evt_type)
     {
-        case BLE_ESS_EVT_NOTIFICATION_DISABLED:
+        case BLE_ESS_EVT_NOTIF_DISABLED:
             break;
-        case BLE_ESS_EVT_NOTIFICATION_ENABLED:
+        case BLE_ESS_EVT_NOTIF_ENABLED:
             break;
 
         default:
@@ -505,7 +496,7 @@ static void conn_params_init(void)
 static void application_timers_start(void)
 {
     ret_code_t err_code;
-    err_code = app_timer_start(battery_timer, APP_TIMER_TICKS(10 * 1000), NULL);
+    err_code = app_timer_start(battery_timer, APP_TIMER_TICKS(60 * 60 * 1000), NULL);
     APP_ERROR_CHECK(err_code);
 }
 
@@ -619,6 +610,13 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context)
             NRF_LOG_DEBUG("GATT Server Timeout.");
             err_code = sd_ble_gap_disconnect(p_ble_evt->evt.gatts_evt.conn_handle,
                                              BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
+            APP_ERROR_CHECK(err_code);
+            break;
+
+        case BLE_GATTS_EVT_SYS_ATTR_MISSING:
+            // No system attributes have been stored.
+            NRF_LOG_DEBUG("GATT Server Attribute missing.");
+            err_code = sd_ble_gatts_sys_attr_set(m_conn_handle, NULL, 0, 0);
             APP_ERROR_CHECK(err_code);
             break;
 
@@ -859,7 +857,7 @@ static void env_sensors_drdy_cb(const env_sens_data_t *data)
     ess_meas.is_pressure_data_present = true;
     ess_meas.pressure = lroundf(data->pressure * 1000.0f);
 
-    ble_ess_measurement_update(&m_ess, &ess_meas, m_ess.conn_handle);
+    ble_ess_measurement_update(&m_ess, &ess_meas, m_conn_handle);
 }
 
 /**@brief Function for application main entry.
@@ -871,7 +869,6 @@ int main(void)
     // Initialize.
     log_init();
     timers_init();
-    adc_init();
 #if APP_USE_BSP
     board_init(&erase_bonds);
 #endif

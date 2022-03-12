@@ -59,15 +59,18 @@ static void on_cccd_write(ble_ess_t * p_ess, ble_gatts_evt_write_t const * p_evt
         if (p_ess->evt_handler != NULL)
         {
             ble_ess_evt_t evt;
+            bool notif_enabled = ble_srv_is_notification_enabled(p_evt_write->data);
 
-            if (ble_srv_is_notification_enabled(p_evt_write->data))
-            {
-                evt.evt_type = BLE_ESS_EVT_NOTIFICATION_ENABLED;
-            }
-            else
-            {
-                evt.evt_type = BLE_ESS_EVT_NOTIFICATION_DISABLED;
-            }
+            if (p_evt_write->handle == p_ess->temperature_handles.cccd_handle)
+                p_ess->temperature_notif_enabled = notif_enabled;
+
+            if (p_evt_write->handle == p_ess->humidity_handles.cccd_handle)
+                p_ess->humidity_notif_enabled = notif_enabled;
+
+            if (p_evt_write->handle == p_ess->pressure_handles.cccd_handle)
+                p_ess->pressure_notif_enabled = notif_enabled;
+
+            evt.evt_type = notif_enabled ? BLE_ESS_EVT_NOTIF_ENABLED : BLE_ESS_EVT_NOTIF_DISABLED;
 
             p_ess->evt_handler(p_ess, &evt);
         }
@@ -136,11 +139,11 @@ static ret_code_t notify(uint16_t conn_handle, uint16_t value_handle, uint8_t *p
 
 static ret_code_t update(uint16_t conn_handle, uint16_t value_handle, uint8_t *p_value, uint16_t len)
 {
-    ble_gatts_value_t      gatts_value = {0};
-    ret_code_t             err_code = NRF_SUCCESS;
+    ble_gatts_value_t gatts_value = { 0 };
+    ret_code_t err_code = NRF_SUCCESS;
 
-    gatts_value.len     = len;
-    gatts_value.offset  = 0;
+    gatts_value.len = len;
+    gatts_value.offset = 0;
     gatts_value.p_value = p_value;
 
     err_code = sd_ble_gatts_value_set(conn_handle, value_handle, &gatts_value);
@@ -309,7 +312,7 @@ uint32_t ble_ess_measurement_update(ble_ess_t * p_ess, ble_ess_meas_t * p_measur
         }
 
         // Send notification
-        if (conn_handle != BLE_CONN_HANDLE_INVALID)
+        if (conn_handle != BLE_CONN_HANDLE_INVALID && p_ess->temperature_notif_enabled)
         {
             err_code = notify(conn_handle, p_ess->temperature_handles.value_handle, encoded_meas, len);
             if (err_code != NRF_SUCCESS)
@@ -330,7 +333,7 @@ uint32_t ble_ess_measurement_update(ble_ess_t * p_ess, ble_ess_meas_t * p_measur
         }
 
         // Send notification
-        if (conn_handle != BLE_CONN_HANDLE_INVALID)
+        if (conn_handle != BLE_CONN_HANDLE_INVALID && p_ess->humidity_notif_enabled)
         {
             err_code = notify(conn_handle, p_ess->humidity_handles.value_handle, encoded_meas, len);
             if (err_code != NRF_SUCCESS)
@@ -351,7 +354,7 @@ uint32_t ble_ess_measurement_update(ble_ess_t * p_ess, ble_ess_meas_t * p_measur
         }
 
         // Send notification
-        if (conn_handle != BLE_CONN_HANDLE_INVALID)
+        if (conn_handle != BLE_CONN_HANDLE_INVALID && p_ess->pressure_notif_enabled)
         {
             err_code = notify(conn_handle, p_ess->pressure_handles.value_handle, encoded_meas, len);
             if (err_code != NRF_SUCCESS)
