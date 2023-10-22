@@ -243,8 +243,8 @@ env_sens_stat_t env_sensors_init(void)
     nrf_gpio_cfg_output(ENV_SENS_PUP_PIN);
     nrf_gpio_pin_set(ENV_SENS_PUP_PIN);
 
-    /* Config & enable power to sensors */
-    nrf_gpio_cfg_output(ENV_SENS_PWR_PIN);
+    /* Config & enable power to sensors (high drive) */
+    nrf_gpio_cfg(ENV_SENS_PWR_PIN, NRF_GPIO_PIN_DIR_OUTPUT, NRF_GPIO_PIN_INPUT_DISCONNECT, NRF_GPIO_PIN_NOPULL, NRF_GPIO_PIN_D0H1, NRF_GPIO_PIN_NOSENSE);
     nrf_gpio_pin_set(ENV_SENS_PWR_PIN);
 
     nrf_delay_ms(10);
