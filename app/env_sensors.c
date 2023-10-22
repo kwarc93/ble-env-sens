@@ -89,8 +89,8 @@ static void hts221_reg_cb(ret_code_t result, void * p_register_data)
         if (status_reg & 0b11)
         {
             /* Data is ready - read it */
-            hts221_temp_read(&hts221_sensor, hts221_temp_data_cb, &hts221_ctx.raw_temp);
             hts221_hum_read(&hts221_sensor, hts221_hum_data_cb, &hts221_ctx.raw_hum);
+            hts221_temp_read(&hts221_sensor, hts221_temp_data_cb, &hts221_ctx.raw_temp);
             return;
         }
     }
@@ -273,7 +273,6 @@ env_sens_stat_t env_sensors_init(void)
     result |= lps22hb_init(&lps22hb_sensor);
 
     result |= hts221_pd_enable(&hts221_sensor, true);
-    nrf_delay_ms(5);
 
     hts221_clear_ctx();
     lps22hb_clear_ctx();
@@ -299,8 +298,6 @@ env_sens_stat_t env_sensors_deinit(void)
 
 env_sens_stat_t env_sensors_trigger_measurement(env_sens_drdy_cb_t drdy_cb)
 {
-    hts221_data_rate_cfg(&hts221_sensor, HTS221_ODR_ONESHOT);
-
     hts221_clear_ctx();
     hts221_oneshot(&hts221_sensor);
     hts221_status_read(&hts221_sensor, hts221_reg_cb, &hts221_ctx.reg);
