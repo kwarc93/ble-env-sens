@@ -18,13 +18,14 @@
 //-----------------------------------------------------------------------------
 /* definitions */
 
-#define ENV_SENS_PWR_PIN                NRF_GPIO_PIN_MAP(0,22)
-#define ENV_SENS_PUP_PIN                NRF_GPIO_PIN_MAP(1,0)
-#define ENV_SENS_TWI_SCL_PIN            NRF_GPIO_PIN_MAP(0,15)
-#define ENV_SENS_TWI_SDA_PIN            NRF_GPIO_PIN_MAP(0,14)
+#define ENV_SENS_PWR_PIN                        NRF_GPIO_PIN_MAP(0,22)
+#define ENV_SENS_PUP_PIN                        NRF_GPIO_PIN_MAP(1,0)
+#define ENV_SENS_TWI_SCL_PIN                    NRF_GPIO_PIN_MAP(0,15)
+#define ENV_SENS_TWI_SDA_PIN                    NRF_GPIO_PIN_MAP(0,14)
 
-#define ENV_SENS_TWI_INSTANCE_ID        0
-#define ENV_SENS_USE_LPS22BH_TEMP       1
+#define ENV_SENS_TWI_INSTANCE_ID                0
+#define ENV_SENS_USE_LPS22BH_TEMP               1
+#define ENV_SENS_USE_HTS221_CUSTOM_RH_CAL       1
 
 //-----------------------------------------------------------------------------
 /* private */
@@ -273,6 +274,13 @@ env_sens_stat_t env_sensors_init(void)
     result |= lps22hb_init(&lps22hb_sensor);
 
     result |= hts221_pd_enable(&hts221_sensor, true);
+
+#if ENV_SENS_USE_HTS221_CUSTOM_RH_CAL
+    hts221_sensor.calib_info.H0_T0_OUT = -3220;
+    hts221_sensor.calib_info.H1_T0_OUT = 8218;
+    hts221_sensor.calib_info.H0_rH_x2 = 28;
+    hts221_sensor.calib_info.H1_rH_x2 = 150;
+#endif
 
     hts221_clear_ctx();
     lps22hb_clear_ctx();
