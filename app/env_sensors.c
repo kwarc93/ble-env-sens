@@ -128,6 +128,12 @@ static void hts221_hum_data_cb(ret_code_t result, int16_t * p_data)
     if (result == NRF_SUCCESS)
     {
         /* Data is ready - process it */
+#if ENV_SENS_USE_HTS221_CUSTOM_RH_CAL
+        hts221_sensor.calib_info.H0_T0_OUT = 7489;
+        hts221_sensor.calib_info.H1_T0_OUT = -19101;
+        hts221_sensor.calib_info.H0_rH_x2 = 28;
+        hts221_sensor.calib_info.H1_rH_x2 = 150;
+#endif
         int16_t hum = *(int16_t*)p_data;
         env_sens_data.humidity = hts221_hum_process(&hts221_sensor, hum) / 2.0f;
 
@@ -274,13 +280,6 @@ env_sens_stat_t env_sensors_init(void)
     result |= lps22hb_init(&lps22hb_sensor);
 
     result |= hts221_pd_enable(&hts221_sensor, true);
-
-#if ENV_SENS_USE_HTS221_CUSTOM_RH_CAL
-    hts221_sensor.calib_info.H0_T0_OUT = -3220;
-    hts221_sensor.calib_info.H1_T0_OUT = 8218;
-    hts221_sensor.calib_info.H0_rH_x2 = 28;
-    hts221_sensor.calib_info.H1_rH_x2 = 150;
-#endif
 
     hts221_clear_ctx();
     lps22hb_clear_ctx();
